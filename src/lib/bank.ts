@@ -158,6 +158,11 @@ export function loadBankIndex(): Promise<BankIndex> {
       const subjectBySlug = new Map<string, BankSubject>();
       for (const s of bank.subjects) subjectBySlug.set(subjectSlug(s.subject), s);
       return { bank, byId, byPaper, topicsByKey, topicsBySubject, subjectBySlug };
+    }).catch((err) => {
+      // Do not permanently cache a transient index-build failure. The provider
+      // can retry after a failed network response or a partially deployed bank.
+      indexPromise = null;
+      throw err;
     });
   }
   return indexPromise;
@@ -174,7 +179,7 @@ export function topicSlug(key: string): string {
 /** Find the topic object for a question's topic (merged display title). */
 export function topicOfQuestion(idx: BankIndex, q: BankQuestion): BankTopic | undefined {
   if (!q.topic) return undefined;
-  return idx.bank.topics.find((t) => t.questionIds.includes(q.id));
+  return idx.topicsByKey.get(q.topic) ?? idx.bank.topics.find((t) => t.questionIds.includes(q.id));
 }
 
 export const MONTH_ORDER = [

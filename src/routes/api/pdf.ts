@@ -22,6 +22,7 @@ async function loadBank(): Promise<NotesBank> {
   if (bankCache) return bankCache;
   const candidates = [
     path.resolve("public/notes-bank.json"),
+    path.resolve(".vercel/output/static/notes-bank.json"),
     path.resolve("dist/public/notes-bank.json"),
     path.resolve(".output/public/notes-bank.json"),
   ];
@@ -92,6 +93,16 @@ export const Route = createFileRoute("/api/pdf")({
           body = await request.json();
         } catch {
           return new Response("Invalid JSON body", { status: 400 });
+        }
+
+        if (!body || typeof body !== "object" || Array.isArray(body)) {
+          return new Response("Invalid request body", { status: 400 });
+        }
+        if (body.title !== undefined && (typeof body.title !== "string" || body.title.length > 160)) {
+          return new Response("Invalid title", { status: 400 });
+        }
+        if (body.questionIds !== undefined && (!Array.isArray(body.questionIds) || body.questionIds.length > 500 || body.questionIds.some((id) => typeof id !== "string"))) {
+          return new Response("Invalid question selection", { status: 400 });
         }
 
         const bank = await loadBank();

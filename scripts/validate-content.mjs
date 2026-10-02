@@ -121,7 +121,7 @@ for (const q of bank.questions) {
     noNote++;
     continue;
   }
-  const idOk = /^final|third|second|first_[a-z0-9_]+__q\d{2}$/.test(q.id);
+  const idOk = /^(?:final|third|second|first)_[a-z0-9_]+__q\d{2}$/.test(q.id);
   if (!idOk) fail(`malformed question id: ${q.id}`);
   for (const ref of q.note.refs ?? []) {
     if (ref.id && !bankIds.has(ref.id)) badRefTarget++;
