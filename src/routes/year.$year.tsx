@@ -2,7 +2,6 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
-import { DownloadPack } from "@/components/download-pack";
 import { PaperCard } from "@/components/paper-card";
 import { usePapers } from "@/components/papers-provider";
 import { Button } from "@/components/ui/button";
@@ -15,7 +14,7 @@ export const Route = createFileRoute("/year/$year")({
 
 function YearPage() {
   const { year } = Route.useParams();
-  const { papers, texts, loading } = usePapers();
+  const { papers, loading } = usePapers();
   const [subject, setSubject] = useState<string>("all");
 
   const yearPapers = useMemo(
@@ -70,16 +69,7 @@ function YearPage() {
         {months.length ? ` · ${months.join(", ")}` : ""}
       </p>
 
-      <div className="mt-6">
-        <DownloadPack
-          papers={visible}
-          texts={texts}
-          scope={subject === "all" ? String(year) : `${subject} ${year}`}
-          compact
-        />
-      </div>
-
-      <div className="mt-5 flex flex-wrap gap-2">
+      <div className="mt-6 flex flex-wrap gap-2">
         <Chip active={subject === "all"} onClick={() => setSubject("all")}>
           All subjects
         </Chip>

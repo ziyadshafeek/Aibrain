@@ -806,8 +806,10 @@ for (const b of allBlocks) {
       report.crossRefs.total++;
       const seg = segmentFor(line, m.index + m[0].length);
       const res = resolveCrossRef(b, m[1], Number(m[2]), seg);
-      if (res?.self) report.crossRefs.self++;
-      else if (res?.target) {
+      if (res?.self) {
+        report.crossRefs.self++;
+        crossRefIndex.push({ block: b, code: m[1], qnum: Number(m[2]), target: b, method: "self" });
+      } else if (res?.target) {
         report.crossRefs.resolved++;
         crossRefIndex.push({ block: b, code: m[1], qnum: Number(m[2]), target: res.target, method: res.score != null ? `topic-similarity(${res.score})` : "hint" });
       } else {
@@ -817,63 +819,71 @@ for (const b of allBlocks) {
   }
 }
 
-/* --- bare citations [code:Qn] --- */
+/* --- bare citations [code:Qn] and lists [code:Qn, code:Qn] --- */
+function resolveBareCitation(b, code, qnum, line) {
+  if (b.code === code && b.qnum === qnum) {
+    report.bareCitations.resolved++;
+    crossRefIndex.push({ block: b, code, qnum, target: b, method: "self", bare: true });
+    return true;
+  }
+  const samePaper = b.code === code ? findBlocks(code, qnum).filter((x) => x.session === b.session) : [];
+  if (samePaper.length === 1) {
+    report.bareCitations.resolved++;
+    crossRefIndex.push({ block: b, code, qnum, target: samePaper[0], method: "same-paper", bare: true });
+    return true;
+  }
+  const earlier = findBlocks(code, qnum).filter((x) => x.chunkIdx === b.chunkIdx && x.lineIdx < b.lineIdx);
+  if (earlier.length === 1) {
+    report.bareCitations.resolved++;
+    crossRefIndex.push({ block: b, code, qnum, target: earlier[0], method: "unique-earlier", bare: true });
+    return true;
+  }
+  if (earlier.length === 0) {
+    const global = findBlocks(code, qnum);
+    if (global.length === 1) {
+      report.bareCitations.resolved++;
+      crossRefIndex.push({ block: b, code, qnum, target: global[0], method: "unique-global", bare: true });
+      return true;
+    }
+  }
+  const top = topicMatchResolve(code, qnum, `${line} ${b.heading ?? ""}`, b);
+  if (top?.block) {
+    report.bareCitations.resolved++;
+    crossRefIndex.push({ block: b, code, qnum, target: top.block, method: `topic-similarity(${top.score})`, bare: true });
+    report.bareCitations.review.push({
+      block: `${b.paperId}|Q${b.qnum ?? "?"}`,
+      ref: `${code}:Q${qnum}`,
+      target: `${top.block.paperId}|Q${qnum}`,
+      score: top.score,
+      targetHeading: (top.block.heading ?? "").slice(0, 80),
+      line: line.slice(0, 110),
+    });
+    return true;
+  }
+  report.bareCitations.review.push({
+    block: `${b.paperId}|Q${b.qnum ?? "?"}`,
+    ref: `${code}:Q${qnum}`,
+    unresolved: true,
+    best: top?.best ?? null,
+    line: line.slice(0, 110),
+  });
+  return false;
+}
+
+const BARE_LIST = /(?<!\[)\[(\d{6}:Q\d{1,2}(?:\s*,\s*\d{6}:Q\d{1,2})*)\](?!\])/g;
 for (const b of allBlocks) {
   if (b.dead) continue;
   const lines = b.rawContent.split("\n");
   for (const line of lines) {
-    BARE_CITATION.lastIndex = 0;
+    BARE_LIST.lastIndex = 0;
     let m;
-    while ((m = BARE_CITATION.exec(line))) {
-      report.bareCitations.total++;
-      const code = m[1];
-      const qnum = Number(m[2]);
-      if (b.code === code && b.qnum === qnum) {
-        report.bareCitations.resolved++;
-        crossRefIndex.push({ block: b, code, qnum, target: b, method: "self", bare: true });
-        continue;
+    while ((m = BARE_LIST.exec(line))) {
+      for (const el of m[1].split(/\s*,\s*/)) {
+        const code = el.slice(0, 6);
+        const qnum = Number(el.split(":Q")[1]);
+        report.bareCitations.total++;
+        resolveBareCitation(b, code, qnum, line);
       }
-      const samePaper = b.code === code ? findBlocks(code, qnum).filter((x) => x.session === b.session) : [];
-      if (samePaper.length === 1) {
-        report.bareCitations.resolved++;
-        crossRefIndex.push({ block: b, code, qnum, target: samePaper[0], method: "same-paper", bare: true });
-        continue;
-      }
-      const earlier = findBlocks(code, qnum).filter((x) => x.chunkIdx === b.chunkIdx && x.lineIdx < b.lineIdx);
-      if (earlier.length === 1) {
-        report.bareCitations.resolved++;
-        crossRefIndex.push({ block: b, code, qnum, target: earlier[0], method: "unique-earlier", bare: true });
-        continue;
-      }
-      if (earlier.length === 0) {
-        const global = findBlocks(code, qnum);
-        if (global.length === 1) {
-          report.bareCitations.resolved++;
-          crossRefIndex.push({ block: b, code, qnum, target: global[0], method: "unique-global", bare: true });
-          continue;
-        }
-      }
-      const top = topicMatchResolve(code, qnum, `${line} ${b.heading ?? ""}`, b);
-      if (top?.block) {
-        report.bareCitations.resolved++;
-        crossRefIndex.push({ block: b, code, qnum, target: top.block, method: `topic-similarity(${top.score})`, bare: true });
-        report.bareCitations.review.push({
-          block: `${b.paperId}|Q${b.qnum ?? "?"}`,
-          ref: `${code}:Q${qnum}`,
-          target: `${top.block.paperId}|Q${qnum}`,
-          score: top.score,
-          targetHeading: (top.block.heading ?? "").slice(0, 80),
-          line: line.slice(0, 110),
-        });
-        continue;
-      }
-      report.bareCitations.review.push({
-        block: `${b.paperId}|Q${b.qnum ?? "?"}`,
-        ref: `${code}:Q${qnum}`,
-        unresolved: true,
-        best: top?.best ?? null,
-        line: line.slice(0, 110),
-      });
     }
   }
 }
@@ -918,6 +928,26 @@ for (const [paperId, blocks] of paperBlocks) {
     ...mcqFragments.filter((b) => !mcqQuestion).map((b) => b.qnum),
   ]);
 
+  const refsForBlocks = (blocks) => {
+    const set = new Set(blocks);
+    return crossRefIndex
+      .filter((r) => set.has(r.block))
+      .map((r) => {
+        const targetQ =
+          r.target && (r.target.kind === "mcq" ? r.target.mergedInto : r.target.mappedQnum != null ? r.target.mappedQnum : r.target.qnum);
+        return {
+          id: r.target && targetQ != null ? `${r.target.paperId}__q${String(targetQ).padStart(2, "0")}` : null,
+          code: r.code,
+          qnum: r.qnum,
+          label: r.target
+            ? `${r.target.code} Q${String(r.target.qnum).padStart(2, "0")} — ${cleanTitle(r.target)}`
+            : `${r.code} Q${String(r.qnum).padStart(2, "0")}`,
+          method: r.method,
+        };
+      })
+      .filter((r, i, arr) => arr.findIndex((x) => x.code === r.code && x.qnum === r.qnum && !!x.id === !!r.id) === i);
+  };
+
   const paperQuestions = [];
   for (const qnum of [...allQnums].sort((a, b) => a - b)) {
     const oq = official.find((q) => q.number === qnum);
@@ -934,22 +964,9 @@ for (const [paperId, blocks] of paperBlocks) {
         })
         .filter(Boolean)
         .join("\n\n---\n\n");
-      note = { kind: "mcq-key", title: "MCQ answer key", content: merged, refs: [], mapping: { method: "mcq-merge", fragments: mcqFragments.length } };
+      note = { kind: "mcq-key", title: "MCQ answer key", content: merged, refs: refsForBlocks(mcqFragments), mapping: { method: "mcq-merge", fragments: mcqFragments.length } };
     } else if (noteBlock) {
-      const refs = crossRefIndex
-        .filter((r) => r.block === noteBlock)
-        .map((r) => {
-          const targetQ =
-            r.target && (r.target.kind === "mcq" ? r.target.mergedInto : r.target.mappedQnum != null ? r.target.mappedQnum : r.target.qnum);
-          return {
-            id: r.target && targetQ != null ? `${r.target.paperId}__q${String(targetQ).padStart(2, "0")}` : null,
-            code: r.code,
-            qnum: r.qnum,
-            label: r.target ? `${r.target.code} Q${String(r.target.qnum).padStart(2, "0")} — ${cleanTitle(r.target)}` : `${r.code} Q${String(r.qnum).padStart(2, "0")}`,
-            method: r.method,
-          };
-        })
-        .filter((r, i, arr) => arr.findIndex((x) => x.code === r.code && x.qnum === r.qnum && !!x.id === !!r.id) === i);
+      const refs = refsForBlocks([noteBlock]);
       note = {
         kind: noteBlock.kind,
         title: cleanTitle(noteBlock),

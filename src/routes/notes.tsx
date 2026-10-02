@@ -1,105 +1,98 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { BookOpen, ChevronRight, FileQuestion } from "lucide-react";
+import { ArrowRight, BookOpenCheck } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { NotesDownloadBar } from "@/components/notes-download-bar";
-import { useNotes } from "@/components/notes-provider";
-import { displaySubject } from "@/lib/notes";
+import { useBank } from "@/components/study/bank-provider";
+import { Skeleton } from "@/components/ui/skeleton";
+import { subjectSlug } from "@/lib/bank";
 
-export const Route = createFileRoute("/notes")({ component: NotesHome });
+export const Route = createFileRoute("/notes")({
+  component: NotesHub,
+});
 
-function NotesHome() {
-  const { bank, notes, loading, error } = useNotes();
-  const subjects = bank?.subjects ?? [];
+function NotesHub() {
+  const { idx, error } = useBank();
 
   return (
     <AppShell>
-      <section className="notes-hero">
-        <div>
-          <p className="eyebrow">Study notes</p>
-          <h1>Question-by-question study commentary.</h1>
-          <p>
-            Every note is mapped against the official KUHS question it belongs to. Grouped MCQs
-            are deliberately left out rather than guessed. If a question has no reliable note,
-            it stays visible as a question with a clear “No note” status.
-          </p>
-        </div>
-        <div className="notes-stat-grid">
-          <Stat label="Questions indexed" value={bank?.stats.questions ?? "—"} />
-          <Stat label="With notes" value={bank?.stats.withNotes ?? "—"} />
-          <Stat label="Papers" value={bank?.stats.papers ?? "—"} />
-        </div>
+      <section className="mb-8">
+        <p className="text-xs font-medium uppercase tracking-widest text-primary">Study notes</p>
+        <h1 className="mt-2 font-display text-3xl font-medium tracking-tight sm:text-4xl">
+          Every question, answered in depth.
+        </h1>
+        <p className="mt-3 max-w-2xl text-base leading-relaxed text-muted-foreground">
+          Structured notes for each question of every covered paper — with diagrams, formulas,
+          tables and cross-links to related answers across subjects and years.
+        </p>
+        {idx ? (
+          <dl className="mt-5 flex flex-wrap gap-6 text-sm">
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted-foreground">Subjects</dt>
+              <dd className="font-display text-2xl font-medium tabular-nums">{idx.bank.subjects.length}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted-foreground">Questions with notes</dt>
+              <dd className="font-display text-2xl font-medium tabular-nums">
+                {idx.bank.stats.withNotes.toLocaleString()}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted-foreground">Topics</dt>
+              <dd className="font-display text-2xl font-medium tabular-nums">
+                {idx.bank.topics.length.toLocaleString()}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted-foreground">Diagrams</dt>
+              <dd className="font-display text-2xl font-medium tabular-nums">{idx.bank.stats.diagrams}</dd>
+            </div>
+          </dl>
+        ) : null}
       </section>
 
-      {error ? <p className="mt-4 text-sm text-destructive">{error}</p> : null}
-      {loading ? <p className="notes-loading">Loading the question index…</p> : null}
+      {error ? (
+        <p className="rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>
+      ) : null}
 
-      {!loading ? (
-        <>
-          <div className="notes-page-intro">
-            <div>
-              <p className="eyebrow">Choose a subject</p>
-              <h2>Open a question set</h2>
-            </div>
-            <p>
-              Choose a subject, then a year and sitting. The reader follows the same order as the
-              official question paper.
-            </p>
-          </div>
+      {!idx && !error ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <Skeleton key={i} className="h-28 rounded-2xl" />
+          ))}
+        </div>
+      ) : null}
 
-          <div className="note-set-grid">
-            {subjects.map((s) => (
+      {idx ? (
+        <section className="grid gap-3 sm:grid-cols-2">
+          {idx.bank.subjects.map((s) => {
+            const years = s.years;
+            return (
               <Link
                 key={s.subject}
                 to="/notes/$subject"
-                params={{ subject: displaySubject(s.subject) }}
-                className="note-set-card"
+                params={{ subject: subjectSlug(s.subject) }}
+                className="group rounded-2xl bg-card p-5 shadow-card transition-[box-shadow] duration-200 hover:shadow-card-hover"
               >
-                <div className="note-card-top">
-                  <span className="font-mono text-xs tabular-nums">{s.papers} papers</span>
-                  <span>{s.years.length ? `${s.years[s.years.length - 1]}–${s.years[0]}` : ""}</span>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2 className="font-display text-xl font-medium tracking-tight">{s.display}</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {s.papers} papers · {s.questions.toLocaleString()} questions
+                      {years.length ? ` · ${years[years.length - 1]}–${years[0]}` : ""}
+                    </p>
+                  </div>
+                  <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground">
+                    <BookOpenCheck className="size-4.5" aria-hidden />
+                  </span>
                 </div>
-                <h2>{displaySubject(s.display)}</h2>
-                <div className="note-card-metrics">
-                  <span><FileQuestion className="size-3.5" /> {s.questions} questions</span>
-                  <span><BookOpen className="size-3.5" /> {s.withNotes} with notes</span>
-                  {s.missing ? <span className="muted">{s.missing} without a mapped note</span> : null}
-                </div>
-                <div className="note-card-bottom">
-                  <span>{s.years.map(String).join(" · ")}</span>
-                  <ChevronRight className="size-4" />
-                </div>
+                <p className="mt-4 inline-flex items-center gap-1.5 font-mono text-sm tabular-nums text-primary">
+                  {s.topics} topics
+                  <ArrowRight className="size-3.5 transition-transform duration-150 group-hover:translate-x-0.5" aria-hidden />
+                </p>
               </Link>
-            ))}
-          </div>
-
-          {notes.length ? <NotesDownloadBar notes={notes} /> : null}
-
-          {bank?.stats.skippedGroupedMcq ? (
-            <div className="notes-integrity-note">
-              <strong>{bank.stats.skippedGroupedMcq} grouped MCQ blocks skipped.</strong>
-              They are excluded from the question-to-note mapping because splitting individual
-              MCQ items reliably would require guessing.
-            </div>
-          ) : null}
-
-          {!subjects.length ? (
-            <div className="notes-empty">
-              <BookOpen />
-              <h2>No notes loaded</h2>
-              <p>The notes index could not be read.</p>
-            </div>
-          ) : null}
-        </>
+            );
+          })}
+        </section>
       ) : null}
     </AppShell>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div>
-      <span>{label}</span>
-      <strong>{typeof value === "number" ? value.toLocaleString() : value}</strong>
-    </div>
   );
 }
