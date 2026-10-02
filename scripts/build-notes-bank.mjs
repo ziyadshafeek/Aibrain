@@ -607,7 +607,7 @@ for (const [paperId, blocks] of paperBlocks) {
   for (const b of candidates) {
     if (b.preface) continue;
     const refTarget = b.qnum != null ? official.find((q) => q.number === b.qnum) : undefined;
-    const offsetTarget = b.qnum != null && offsetApplied ? official.find((q) => q.number === b.qnum + offset) : undefined;
+    const _offsetTarget = b.qnum != null && offsetApplied ? official.find((q) => q.number === b.qnum + offset) : undefined;
     const text = b.kind === "refer" ? referTargetText(b) : blockMatchText(b);
     if (offsetApplied && b.qnum != null) {
       const targetNum = b.qnum + offset;
@@ -925,7 +925,7 @@ for (const [paperId, blocks] of paperBlocks) {
     ...mappedNotes,
     ...(mcqQuestion && mcqFragments.length ? [mcqQuestion.number] : []),
     ...noteOnlyQnums.filter((q) => q != null),
-    ...mcqFragments.filter((b) => !mcqQuestion).map((b) => b.qnum),
+    ...mcqFragments.filter((_b) => !mcqQuestion).map((b) => b.qnum),
   ]);
 
   const refsForBlocks = (blocks) => {

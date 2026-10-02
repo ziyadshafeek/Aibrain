@@ -34,6 +34,7 @@ const WINANSI_EXTRA = new Set(
   "€‚ƒ„…†‡ˆ‰Š‹ŒŽ''\"\"•–—˜™š›œžŸ".split(""),
 );
 function uni(s: string): string {
+  // eslint-disable-next-line no-control-regex -- WinAnsi range check
   return s.replace(/[^\u0000-\u00ff]/g, (ch) => (WINANSI_EXTRA.has(ch) ? ch : UNI_FALLBACK[ch] ?? ""));
 }
 
@@ -148,6 +149,7 @@ export function parseNote(content: string, refs?: NoteRef[], refLinks?: PdfRef[]
       i++;
       continue;
     }
+    // eslint-disable-next-line no-control-regex
     const cb = trimmed.match(/^\u0001CB(\d+)\u0001$/);
     if (cb) {
       blocks.push({ t: "code", code: codeBoxes[Number(cb[1])] });
@@ -194,7 +196,8 @@ export function parseNote(content: string, refs?: NoteRef[], refLinks?: PdfRef[]
           lines[i].trim() &&
           (!lastRowClosed || /^\|/.test(lines[i].trim()) || /\|$/.test(lines[i].trim())) &&
           !/^(\||#{1,6}\s|[-*+]\s|\d{1,2}[.)]\s|>|(-{3,}|\*{3,}|_{3,})$)/.test(lines[i].trim()) &&
-          !/^\u0001CB\d+\u0001$/.test(lines[i].trim())
+          // eslint-disable-next-line no-control-regex -- placeholder token check
+      !/^\u0001CB\d+\u0001$/.test(lines[i].trim())
         ) {
           const piece = lines[i].trim().replace(/^\|/, "").replace(/\|$/, "");
           const r = rows[rows.length - 1];
@@ -244,6 +247,7 @@ export function parseNote(content: string, refs?: NoteRef[], refLinks?: PdfRef[]
       // stop at structural lines — but always consume at least one line so the
       // outer loop always makes progress
       if (buf.length > 0 && /^(#{1,6}\s|[-*+]\s|\d{1,2}[.)]\s|>|\||(-{3,}|\*{3,}|_{3,})$)/.test(t3)) break;
+      // eslint-disable-next-line no-control-regex -- placeholder token check
       if (/^\u0001CB\d+\u0001$/.test(t3)) break;
       buf.push(t3);
       i++;
@@ -505,7 +509,6 @@ export class StudyPdf {
     doc.setFont("times", "bold");
     doc.setFontSize(12.5);
     const head = `Q${q.qnum}.  ${q.section}`;
-    const headW = doc.getTextWidth(head);
     doc.text(head, MARGIN_X, this.y + 10);
     this.y += 18;
     if (q.officialText) {
@@ -518,14 +521,12 @@ export class StudyPdf {
       doc.setFontSize(11);
       doc.setTextColor(58, 84, 72);
       const label = "Study Notes";
-      const labelW = doc.getTextWidth(label);
       doc.text(label, MARGIN_X + 10, this.y + 9);
       doc.setTextColor(0);
       this.y += 18;
       const blocks = parseNote(q.note.content, q.note.refs, this.refsOut);
       this.drawNoteBlocks(blocks, MARGIN_X + 10);
     }
-    void headW;
   }
 
   finish() {

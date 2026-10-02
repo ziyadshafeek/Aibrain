@@ -5,7 +5,7 @@ import { useBank } from "@/components/study/bank-provider";
 import { Skeleton } from "@/components/ui/skeleton";
 import { subjectSlug } from "@/lib/bank";
 
-export const Route = createFileRoute("/notes")({
+export const Route = createFileRoute("/notes/")({
   component: NotesHub,
 });
 

@@ -103,17 +103,9 @@ function TopicPage() {
                 {allSelected ? <CheckSquare className="size-3.5 text-primary" aria-hidden /> : <Square className="size-3.5" aria-hidden />}
                 {allSelected ? "Clear selection" : `Select all (${questions.length})`}
               </button>
-              {selected.size > 0 ? (
-                <DownloadPdfButton
-                  payload={{
-                    questionIds: questions.filter((q) => selected.has(q.id)).map((q) => q.id),
-                    title: topic.display,
-                  }}
-                  label={`Download ${selected.size} selected`}
-                />
-              ) : (
+              {selected.size === 0 ? (
                 <DownloadPdfButton payload={{ topicKey: topic.key }} label="Download topic PDF" />
-              )}
+              ) : null}
             </div>
           </header>
 
