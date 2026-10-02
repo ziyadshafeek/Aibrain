@@ -1,5 +1,6 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { PapersProvider } from "@/components/papers-provider";
+import { NotesProvider } from "@/components/notes-provider";
 import appCss from "../styles.css?url";
 
 const APP_NAME = "KUHS Papers & Study Notes";
@@ -45,7 +46,9 @@ export const Route = createRootRoute({
       </head>
       <body>
         <PapersProvider>
-          <Outlet />
+          <NotesProvider>
+            <Outlet />
+          </NotesProvider>
         </PapersProvider>
         <Scripts />
       </body>
