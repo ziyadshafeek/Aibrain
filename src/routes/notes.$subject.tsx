@@ -1,242 +1,150 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, Search } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
+import { ArrowLeft, ArrowRight, FileText, Search } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { NotesDownloadBar } from "@/components/notes-download-bar";
-import { QuestionTafsir } from "@/components/question-tafsir";
-import { useNotes } from "@/components/notes-provider";
-import { Input } from "@/components/ui/input";
-import {
-  displaySubject,
-  filterNotes,
-  noteAnchor,
-  sessionPretty,
-  uniqueSittings,
-} from "@/lib/notes";
-import { cn } from "@/lib/utils";
-
-type NotesSearch = {
-  year?: string;
-  session?: string;
-  paper?: string;
-  paperId?: string;
-  q?: string;
-};
+import { useBank } from "@/components/study/bank-provider";
+import { Skeleton } from "@/components/ui/skeleton";
+import { sessionPretty, subjectSlug } from "@/lib/bank";
 
 export const Route = createFileRoute("/notes/$subject")({
-  validateSearch: (s: Record<string, unknown>): NotesSearch => ({
-    year: typeof s.year === "string" ? s.year : undefined,
-    session: typeof s.session === "string" ? s.session : undefined,
-    paper: typeof s.paper === "string" ? s.paper : undefined,
-    paperId: typeof s.paperId === "string" ? s.paperId : undefined,
-    q: typeof s.q === "string" ? s.q : undefined,
-  }),
-  component: NotesSubject,
+  component: SubjectNotes,
 });
 
-function NotesSubject() {
+function SubjectNotes() {
   const { subject } = Route.useParams();
-  const search = Route.useSearch();
-  const navigate = Route.useNavigate();
-  const decoded = displaySubject(decodeURIComponent(subject));
-  const { notes, loading } = useNotes();
+  const { idx, error } = useBank();
   const [query, setQuery] = useState("");
 
-  const subjectNotes = useMemo(
-    () => notes.filter((n) => displaySubject(n.subject) === decoded),
-    [notes, decoded],
-  );
+  const subjectData = useMemo(() => {
+    if (!idx) return null;
+    const s = idx.bank.subjects.find((x) => subjectSlug(x.subject) === subject);
+    if (!s) return null;
+    const topics = (idx.topicsBySubject.get(s.subject) ?? []).slice(); // sorted by count
+    const papers = idx.bank.papers
+      .filter((p) => p.subject === s.subject)
+      .sort((a, b) => (b.year ?? 0) - (a.year ?? 0) || (b.session ?? "").localeCompare(a.session ?? ""));
+    return { s, topics, papers };
+  }, [idx, subject]);
 
-  const years = useMemo(
-    () =>
-      [...new Set(subjectNotes.map((n) => String(n.year)))]
-        .sort((a, b) => Number(b) - Number(a)),
-    [subjectNotes],
-  );
-
-  const year = search.year ?? years[0];
-  const yearNotes = useMemo(
-    () => subjectNotes.filter((n) => String(n.year) === year),
-    [subjectNotes, year],
-  );
-
-  const sittings = useMemo(() => uniqueSittings(yearNotes), [yearNotes]);
-
-  const activeSitting = useMemo(() => {
-    if (search.paperId) {
-      const byId = sittings.find((s) => s.paperId === search.paperId);
-      if (byId) return byId;
-    }
-    if (search.session) {
-      const bySession = sittings.find(
-        (s) =>
-          s.session === search.session &&
-          (!search.paper || s.paper === search.paper),
-      );
-      if (bySession) return bySession;
-    }
-    return sittings[0];
-  }, [sittings, search.paper, search.paperId, search.session]);
-
-  const visible = useMemo(() => {
-    if (!activeSitting) return [];
-    return filterNotes(yearNotes, {
-      session: activeSitting.session,
-      paper: activeSitting.paper ?? undefined,
-      q: query,
-    }).sort((a, b) => a.qnum - b.qnum);
-  }, [yearNotes, activeSitting, query]);
-
-  useEffect(() => {
-    if (!search.q) return;
-    const target = visible.find((n) => String(n.qnum) === search.q);
-    if (!target) return;
-    const t = window.setTimeout(() => {
-      document.getElementById(noteAnchor(target.id))?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }, 80);
-    return () => window.clearTimeout(t);
-  }, [search.q, visible]);
-
-  function setSearch(patch: NotesSearch) {
-    void navigate({
-      search: (prev) => {
-        const next = { ...prev, ...patch };
-        for (const key of Object.keys(next) as (keyof NotesSearch)[]) {
-          if (!next[key]) delete next[key];
-        }
-        return next;
-      },
-    });
+  if (idx && !subjectData) {
+    throw notFound();
   }
+
+  const filteredTopics = useMemo(() => {
+    if (!subjectData) return [];
+    const q = query.trim().toLowerCase();
+    if (!q) return subjectData.topics;
+    return subjectData.topics.filter(
+      (t) => t.display.toLowerCase().includes(q) || t.key.includes(q),
+    );
+  }, [subjectData, query]);
 
   return (
     <AppShell dense>
-      <div className="notes-breadcrumb">
-        <Link to="/notes">
-          <ArrowLeft className="size-3.5" /> Notes
+      <div className="mb-5 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+        <Link to="/notes" className="inline-flex items-center gap-1 hover:text-foreground">
+          <ArrowLeft className="size-3.5" />
+          Study notes
         </Link>
         <span>/</span>
-        <span>{decoded}</span>
+        <span className="text-foreground">{subjectData?.s.display ?? "…"}</span>
       </div>
 
-      <header className="notes-reader-head">
-        <div>
-          <p className="eyebrow">Question commentary</p>
-          <h1>{decoded}</h1>
-          <p>
-            {subjectNotes.length} indexed questions · {years.join(" · ")}
-          </p>
-        </div>
-      </header>
+      {error ? (
+        <p className="rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>
+      ) : null}
 
-      <div className="year-toolbar">
-        <span>Year</span>
-        {years.map((y) => (
-          <button
-            key={y}
-            type="button"
-            className={cn("year-select", year === y && "active")}
-            onClick={() =>
-              setSearch({
-                year: y,
-                session: undefined,
-                paper: undefined,
-                paperId: undefined,
-                q: undefined,
-              })
-            }
-          >
-            {y}
-          </button>
-        ))}
-      </div>
-
-      <div className="year-toolbar">
-        <span>Sitting</span>
-        {sittings.map((s) => {
-          const active = activeSitting?.paperId === s.paperId;
-          return (
-            <button
-              key={s.paperId}
-              type="button"
-              className={cn("year-select", active && "active")}
-              onClick={() =>
-                setSearch({
-                  year,
-                  session: s.session,
-                  paper: s.paper ?? undefined,
-                  paperId: s.paperId,
-                  q: undefined,
-                })
-              }
-            >
-              {sessionPretty(s.session)}
-              {s.paper ? ` · ${s.paper}` : ""}
-              {s.scheme && s.scheme !== "unknown" ? ` · ${s.scheme}` : ""}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="notes-reader-summary">
-        <div>
-          <span className="eyebrow">Current paper</span>
-          <strong>
-            {activeSitting
-              ? `${sessionPretty(activeSitting.session)}${activeSitting.paper ? ` · ${activeSitting.paper}` : ""}`
-              : "No sitting selected"}
-          </strong>
-        </div>
-        <div className="notes-summary-counts">
-          <span>{visible.length} questions</span>
-          <span>{visible.filter((n) => n.kind !== "missing").length} with notes</span>
-          <span>{visible.filter((n) => n.kind === "missing").length} without a mapped note</span>
-        </div>
-      </div>
-
-      <NotesDownloadBar notes={subjectNotes} subject={decoded} />
-
-      <div className="notes-layout">
-        <aside className="notes-sidebar">
-          <div className="sidebar-search">
-            <Search />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Find a question…"
-            />
+      {!idx ? (
+        <div className="space-y-4">
+          <Skeleton className="h-9 w-72" />
+          <Skeleton className="h-11 w-full" />
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 12 }).map((_, i) => (
+              <Skeleton key={i} className="h-11 rounded-xl" />
+            ))}
           </div>
-          <p className="sidebar-label">Questions</p>
-          {visible.map((n) => (
-            <a key={n.id} className="outline-link" href={`#${noteAnchor(n.id)}`}>
-              <strong className="font-mono tabular-nums">Q{n.qnum}</strong>{" "}
-              {n.title}
-              {n.kind === "missing" ? (
-                <span className="outline-status">No note</span>
-              ) : null}
-            </a>
-          ))}
-        </aside>
+        </div>
+      ) : null}
 
-        <main className="notes-reader-shell">
-          {loading ? (
-            <div className="notes-loading">Loading notes…</div>
-          ) : visible.length ? (
-            <div className="tafsir-stream">
-              {visible.map((note) => (
-                <QuestionTafsir key={note.id} note={note} highlight={query} />
+      {subjectData ? (
+        <>
+          <header className="mb-6">
+            <h1 className="font-display text-3xl font-medium tracking-tight">{subjectData.s.display}</h1>
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              {subjectData.s.papers} papers · {subjectData.s.questions.toLocaleString()} questions ·{" "}
+              {subjectData.s.topics} topics
+              {subjectData.s.years.length
+                ? ` · ${subjectData.s.years[subjectData.s.years.length - 1]}–${subjectData.s.years[0]}`
+                : ""}
+            </p>
+          </header>
+
+          <section className="mb-10">
+            <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="font-display text-xl font-medium tracking-tight">Topics</h2>
+              <label className="relative block sm:w-72">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Filter topics…"
+                  className="h-10 w-full rounded-xl border border-input bg-card pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
+                />
+              </label>
+            </div>
+            {filteredTopics.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No topics match “{query}”.</p>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {filteredTopics.map((t) => (
+                  <Link
+                    key={t.key}
+                    to="/topics/$key"
+                    params={{ key: t.key }}
+                    className="group flex items-center justify-between gap-2 rounded-xl border border-border/60 bg-card px-3.5 py-2.5 text-sm shadow-card transition-[box-shadow] hover:shadow-card-hover"
+                  >
+                    <span className="min-w-0 truncate text-foreground group-hover:text-primary">{t.display}</span>
+                    <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs tabular-nums text-muted-foreground">
+                      {t.count}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section>
+            <h2 className="mb-3 font-display text-xl font-medium tracking-tight">Papers</h2>
+            <div className="grid gap-2">
+              {subjectData.papers.map((p) => (
+                <Link
+                  key={p.id}
+                  to="/paper/$id"
+                  params={{ id: p.id }}
+                  className="group flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-card px-4 py-3 shadow-card transition-[box-shadow] hover:shadow-card-hover"
+                >
+                  <span className="flex min-w-0 items-center gap-3">
+                    <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                      <FileText className="size-4" aria-hidden />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium text-foreground">
+                        {p.paper ? `${p.paper} — ` : ""}
+                        {sessionPretty(p.session)}
+                      </span>
+                      <span className="block font-mono text-xs text-muted-foreground">
+                        {p.code} · {p.scheme === "unknown" ? "scheme n/a" : `${p.scheme} scheme`} ·{" "}
+                        {p.questions} questions
+                      </span>
+                    </span>
+                  </span>
+                  <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden />
+                </Link>
               ))}
             </div>
-          ) : (
-            <div className="notes-empty">
-              No questions match this selection.
-            </div>
-          )}
-        </main>
-      </div>
+          </section>
+        </>
+      ) : null}
     </AppShell>
   );
 }

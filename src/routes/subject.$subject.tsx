@@ -1,16 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, BookOpen } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { ArrowLeft, BookOpenCheck } from "lucide-react";
+import { useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
-import { DownloadPack } from "@/components/download-pack";
 import { PaperCard } from "@/components/paper-card";
 import { usePapers } from "@/components/papers-provider";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { sessionLabel, uniqueSorted } from "@/lib/papers";
+import { subjectSlug } from "@/lib/bank";
+import { uniqueSorted } from "@/lib/papers";
 import { cn } from "@/lib/utils";
-import { displaySubject, loadNotesBank, type StudyNote } from "@/lib/notes";
 
 export const Route = createFileRoute("/subject/$subject")({
   component: SubjectPage,
@@ -19,18 +16,10 @@ export const Route = createFileRoute("/subject/$subject")({
 function SubjectPage() {
   const { subject } = Route.useParams();
   const decoded = decodeURIComponent(subject);
-  const { papers, texts, loading } = usePapers();
-  const [paperFilter, setPaperFilter] = useState<string>("all");
-  const [scheme, setScheme] = useState<string>("all");
-  const [year, setYear] = useState<string>("all");
-  const [notes, setNotes] = useState<StudyNote[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    void loadNotesBank().then((d) => {
-      if (!cancelled) setNotes(d.notes.filter((n) => displaySubject(n.subject) === displaySubject(decoded)));
-    });
-    return () => { cancelled = true; };
-  }, [decoded]);
+  const { papers, loading } = usePapers();
+  const [paperFilter, setPaperFilter] = useState("all");
+  const [scheme, setScheme] = useState("all");
+  const [year, setYear] = useState("all");
 
   const subjectPapers = useMemo(
     () => papers.filter((p) => p.subject === decoded),
@@ -38,200 +27,145 @@ function SubjectPage() {
   );
 
   const paperNames = useMemo(
-    () => uniqueSorted(subjectPapers.map((p) => p.paper)),
+    () => uniqueSorted(subjectPapers.map((p) => p.paper).filter((p): p is string => Boolean(p))),
     [subjectPapers],
   );
   const schemes = useMemo(
-    () => uniqueSorted(subjectPapers.map((p) => p.scheme).filter((s) => s !== "unknown")),
+    () => uniqueSorted(subjectPapers.map((p) => p.scheme).filter((s) => s && s !== "unknown")),
     [subjectPapers],
   );
   const years = useMemo(
-    () => uniqueSorted(subjectPapers.map((p) => p.year)),
+    () => uniqueSorted(subjectPapers.map((p) => p.year).filter((y): y is number => Boolean(y))),
     [subjectPapers],
   );
 
-  const visible = useMemo(
+  const filtered = useMemo(
     () =>
-      subjectPapers.filter((p) => {
-        if (paperFilter !== "all" && p.paper !== paperFilter) return false;
-        if (scheme !== "all" && p.scheme !== scheme) return false;
-        if (year !== "all" && String(p.year) !== year) return false;
-        return true;
-      }),
+      subjectPapers.filter(
+        (p) =>
+          (paperFilter === "all" || p.paper === paperFilter) &&
+          (scheme === "all" || p.scheme === scheme) &&
+          (year === "all" || String(p.year) === year),
+      ),
     [subjectPapers, paperFilter, scheme, year],
   );
 
-  const drill = useMemo(() => {
-    const rows: {
-      section: string;
-      number: number;
-      text: string;
-      paperId: string;
-      session: string;
-      year: number | null;
-    }[] = [];
-    for (const p of visible) {
-      if (p.docType === "correction") continue;
-      const t = texts[p.id];
-      if (!t) continue;
-      for (const q of t.questions) {
-        if (
-          q.section !== "Long Essay" &&
-          q.section !== "Short Essay" &&
-          q.section !== "Short Note"
-        ) {
-          continue;
-        }
-        rows.push({
-          section: q.section,
-          number: q.number,
-          text: q.text,
-          paperId: p.id,
-          session: sessionLabel(p),
-          year: p.year,
-        });
-      }
-    }
-    rows.sort((a, b) => (b.year ?? 0) - (a.year ?? 0));
-    return rows;
-  }, [visible, texts]);
-
-  if (loading) {
-    return (
-      <AppShell>
-        <p className="text-sm text-muted-foreground">Loading…</p>
-      </AppShell>
-    );
-  }
-
-  if (!subjectPapers.length) {
-    return (
-      <AppShell>
-        <p className="font-display text-lg">No papers for {decoded}.</p>
-        <Button asChild className="mt-4">
-          <Link to="/">Back</Link>
-        </Button>
-      </AppShell>
-    );
-  }
-
-  const phaseLabel = uniqueSorted(subjectPapers.map((p) => p.phaseLabel)).join(" · ");
-  const packScope = [decoded, year === "all" ? null : year, paperFilter === "all" ? null : paperFilter]
-    .filter(Boolean)
-    .join(" ");
+  const hasFilters = paperFilter !== "all" || scheme !== "all" || year !== "all";
 
   return (
-    <AppShell>
-      <Link
-        to="/"
-        className="mb-4 inline-flex min-h-11 items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-3.5" />
-        All papers
-      </Link>
-      <p className="text-xs font-medium uppercase tracking-widest text-primary">{phaseLabel}</p>
-      <h1 className="mt-1 font-display text-4xl font-medium tracking-tight">{decoded}</h1>
-      <p className="mt-2 text-muted-foreground">
-        {subjectPapers.length} papers labelled from the printed heading · jump a topic across every sitting
-      </p>
-
-      <div className="mt-6">
-        <DownloadPack papers={visible} texts={texts} scope={packScope} compact />
+    <AppShell dense>
+      <div className="mb-5 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+        <Link to="/" className="inline-flex items-center gap-1 hover:text-foreground">
+          <ArrowLeft className="size-3.5" />
+          All papers
+        </Link>
+        <span>/</span>
+        <span className="text-foreground">{decoded}</span>
       </div>
 
-      {notes.length ? (
-        <Link to="/notes/$subject" params={{ subject: decoded }} className="mt-3 flex items-center justify-between rounded-2xl border border-border bg-card px-5 py-4 shadow-card transition hover:shadow-card-hover">
-          <div className="flex items-center gap-3"><span className="flex size-10 items-center justify-center rounded-xl bg-accent text-accent-foreground"><BookOpen className="size-5" /></span><div><p className="text-xs font-medium uppercase tracking-widest text-primary">Study notes</p><p className="font-display text-lg">Read {displaySubject(decoded)} notes</p><p className="text-sm text-muted-foreground">Full Markdown notes with formulas, tables, figures, code boxes and year-wise PDF / print.</p></div></div><span className="text-sm text-primary">{notes.length} set{notes.length===1?'':'s'} →</span>
-        </Link>
+      <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="font-display text-3xl font-medium tracking-tight">{decoded}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {subjectPapers.length} paper{subjectPapers.length === 1 ? "" : "s"}
+            {years.length ? ` · ${years[years.length - 1]}–${years[0]}` : ""}
+          </p>
+        </div>
+        <Button variant="outline" asChild>
+          <Link to="/notes/$subject" params={{ subject: subjectSlug(decoded) }}>
+            <BookOpenCheck className="size-4" />
+            Study notes for {decoded}
+          </Link>
+        </Button>
+      </header>
+
+      {paperNames.length > 1 || schemes.length > 1 || years.length > 1 ? (
+        <div className="mb-5 space-y-2">
+          {paperNames.length > 1 ? (
+            <FilterRow
+              options={["all", ...paperNames]}
+              value={paperFilter}
+              onChange={setPaperFilter}
+              labelOf={(v) => (v === "all" ? "All papers" : v)}
+            />
+          ) : null}
+          {schemes.length > 1 ? (
+            <FilterRow
+              options={["all", ...schemes]}
+              value={scheme}
+              onChange={setScheme}
+              labelOf={(v) => (v === "all" ? "All schemes" : `${v} scheme`)}
+            />
+          ) : null}
+          {years.length > 1 ? (
+            <FilterRow
+              options={["all", ...years.map(String)]}
+              value={year}
+              onChange={setYear}
+              labelOf={(v) => (v === "all" ? "All years" : v)}
+            />
+          ) : null}
+        </div>
       ) : null}
 
-      <div className="mt-5 flex flex-wrap gap-2">
-        <Chip active={paperFilter === "all"} onClick={() => setPaperFilter("all")}>
-          All papers
-        </Chip>
-        {paperNames.map((name) => (
-          <Chip
-            key={name}
-            active={paperFilter === name}
-            onClick={() => setPaperFilter(name)}
-          >
-            {name}
-          </Chip>
-        ))}
-        {schemes.map((s) => (
-          <Chip key={s} active={scheme === s} onClick={() => setScheme(scheme === s ? "all" : s)}>
-            {s} scheme
-          </Chip>
-        ))}
-        {years.map((y) => (
-          <Chip key={y} active={year === y} onClick={() => setYear(year === y ? "all" : y)}>
-            {y}
-          </Chip>
-        ))}
-      </div>
-
-      <Tabs defaultValue="questions" className="mt-8">
-        <TabsList>
-          <TabsTrigger value="questions">Question bank</TabsTrigger>
-          <TabsTrigger value="papers">Papers ({visible.length})</TabsTrigger>
-        </TabsList>
-        <TabsContent value="questions">
-          {drill.length === 0 ? (
-            <p className="rounded-xl bg-card px-5 py-8 text-sm text-muted-foreground shadow-card">
-              Question text is still loading, or these files are image-only PDFs.
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {drill.map((row, i) => (
-                <Link
-                  key={`${row.paperId}-${row.section}-${row.number}-${i}`}
-                  to="/paper/$id"
-                  params={{ id: row.paperId }}
-                  className="block rounded-xl bg-card p-4 shadow-card transition-[box-shadow] duration-150 hover:shadow-card-hover"
-                >
-                  <div className="mb-2 flex flex-wrap items-center gap-2">
-                    <Badge variant="accent">{row.section}</Badge>
-                    <span className="text-xs text-muted-foreground">{row.session}</span>
-                  </div>
-                  <p className="text-sm leading-relaxed sm:text-base">{row.text}</p>
-                </Link>
-              ))}
-            </div>
-          )}
-        </TabsContent>
-        <TabsContent value="papers">
-          <div className="grid gap-3 sm:grid-cols-2">
-            {visible.map((p) => (
-              <PaperCard key={p.id} paper={p} />
-            ))}
-          </div>
-        </TabsContent>
-      </Tabs>
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Loading papers…</p>
+      ) : filtered.length === 0 ? (
+        <div className="rounded-xl bg-card px-6 py-12 text-center shadow-card">
+          <p className="font-display text-lg">No papers match those filters</p>
+          {hasFilters ? (
+            <Button
+              variant="ghost"
+              className="mt-3"
+              onClick={() => {
+                setPaperFilter("all");
+                setScheme("all");
+                setYear("all");
+              }}
+            >
+              Clear filters
+            </Button>
+          ) : null}
+        </div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {filtered.map((p) => (
+            <PaperCard key={p.id} paper={p} snippetText={null} />
+          ))}
+        </div>
+      )}
     </AppShell>
   );
 }
 
-function Chip({
-  active,
-  onClick,
-  children,
+function FilterRow({
+  options,
+  value,
+  onChange,
+  labelOf,
 }: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
+  options: string[];
+  value: string;
+  onChange: (v: string) => void;
+  labelOf: (v: string) => string;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "inline-flex min-h-10 items-center rounded-full border px-3 text-sm transition-colors duration-150",
-        active
-          ? "border-primary bg-primary text-primary-foreground"
-          : "border-border bg-card text-foreground hover:bg-muted",
-      )}
-    >
-      {children}
-    </button>
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((opt) => (
+        <button
+          key={opt}
+          type="button"
+          onClick={() => onChange(opt)}
+          className={cn(
+            "inline-flex min-h-9 items-center rounded-full border px-3 text-[13px] transition-colors duration-150",
+            value === opt
+              ? "border-primary bg-primary text-primary-foreground"
+              : "border-border bg-card text-foreground hover:bg-muted",
+          )}
+        >
+          {labelOf(opt)}
+        </button>
+      ))}
+    </div>
   );
 }

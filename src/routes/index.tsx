@@ -1,11 +1,10 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowUpRight, Bookmark, Layers3 } from "lucide-react";
+import { ArrowUpRight, Bookmark, BookOpenCheck, Layers3 } from "lucide-react";
 import { useMemo } from "react";
 import { AppShell } from "@/components/app-shell";
-import { DownloadPack } from "@/components/download-pack";
-import { PackBuilder } from "@/components/pack-builder";
 import { PaperCard } from "@/components/paper-card";
 import { usePapers } from "@/components/papers-provider";
+import { useBank } from "@/components/study/bank-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -40,6 +39,7 @@ function Home() {
   const filters = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
   const { papers, texts, loading, error, catalog } = usePapers();
+  const { idx } = useBank();
   const bookmarks = useLibrary((s) => s.bookmarks);
   const recents = useLibrary((s) => s.recents);
 
@@ -83,16 +83,6 @@ function Home() {
     [recents, papers],
   );
 
-  const filterScope = [
-    filters.subject,
-    filters.year,
-    filters.phase ? PHASES.find((p) => p.id === filters.phase)?.short : null,
-    filters.q ? `search ${filters.q}` : null,
-    filters.saved === "1" ? "saved" : null,
-  ]
-    .filter(Boolean)
-    .join(" · ") || "filtered papers";
-
   function setFilter(patch: Partial<HomeSearch>) {
     void navigate({
       search: (prev) => {
@@ -122,20 +112,35 @@ function Home() {
             Medical UG · KUHS
           </p>
           <h1 className="mt-2 max-w-2xl font-display text-4xl font-medium tracking-tight text-foreground sm:text-5xl">
-            Every previous year paper, labelled from the page itself.
+            Every previous year paper — with study notes under every question.
           </h1>
           <p className="mt-4 max-w-xl text-base leading-relaxed text-muted-foreground">
-            Subjects follow the heading printed on each KUHS PDF — not the folder it was dumped
-            in. Search a topic, then download a subject or a year as text or PDF.
+            Subjects follow the heading printed on each KUHS PDF. Open any paper to read the
+            official questions with expandable notes, cross-linked answers, diagrams and
+            formulas — then download the whole thing as a single PDF.
           </p>
-          <Link to="/notes" className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-medium text-foreground shadow-card hover:shadow-card-hover">
-            <span className="flex size-7 items-center justify-center rounded-lg bg-accent text-accent-foreground">✦</span>
-            Open study notes
-          </Link>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <Link
+              to="/notes"
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-semibold text-foreground shadow-card hover:shadow-card-hover"
+            >
+              <BookOpenCheck className="size-4 text-primary" />
+              Browse study notes
+            </Link>
+            <Link
+              to="/topics"
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-medium text-foreground shadow-card hover:shadow-card-hover"
+            >
+              <Layers3 className="size-4 text-primary" />
+              Study by topic
+            </Link>
+          </div>
           <dl className="mt-6 flex flex-wrap gap-6 text-sm">
             <Stat label="Papers" value={catalog?.count ?? papers.length} />
             <Stat label="Years" value={years.length} />
             <Stat label="Subjects" value={subjectCounts.size} />
+            {idx ? <Stat label="Questions with notes" value={idx.bank.stats.withNotes} /> : null}
+            {idx ? <Stat label="Topics" value={idx.bank.topics.length} /> : null}
           </dl>
         </section>
       ) : null}
@@ -214,12 +219,6 @@ function Home() {
         </section>
       ) : null}
 
-      {!loading && !hasFilters ? (
-        <section className="mb-10" id="download-pack">
-          <PackBuilder papers={papers} texts={texts} />
-        </section>
-      ) : null}
-
       {!loading && !hasFilters && recentPapers.length > 0 ? (
         <section className="mb-10">
           <h2 className="mb-3 font-display text-xl font-medium tracking-tight">Continue reading</h2>
@@ -231,25 +230,14 @@ function Home() {
         </section>
       ) : null}
 
-      {hasFilters && !loading ? (
-        <section className="mb-8" id="download-pack">
-          <DownloadPack papers={filtered} texts={texts} scope={filterScope} compact />
-        </section>
-      ) : null}
-
       <section>
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="font-display text-xl font-medium tracking-tight">
-              {filters.saved === "1"
-                ? "Saved papers"
-                : hasFilters
-                  ? "Results"
-                  : "Latest papers"}
+              {filters.saved === "1" ? "Saved papers" : hasFilters ? "Results" : "Latest papers"}
             </h2>
             <p className="text-sm text-muted-foreground">
-              {filtered.length.toLocaleString()}{" "}
-              {filtered.length === 1 ? "paper" : "papers"}
+              {filtered.length.toLocaleString()} {filtered.length === 1 ? "paper" : "papers"}
               {filters.q ? ` matching “${filters.q}”` : ""}
             </p>
           </div>
@@ -312,9 +300,7 @@ function Home() {
                 key={paper.id}
                 paper={paper}
                 snippetText={
-                  filters.q && texts[paper.id]
-                    ? snippet(texts[paper.id].text, filters.q)
-                    : null
+                  filters.q && texts[paper.id] ? snippet(texts[paper.id].text, filters.q) : null
                 }
               />
             ))}
