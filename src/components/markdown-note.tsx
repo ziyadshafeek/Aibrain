@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { ExternalLink } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { NoteRef } from "@/lib/notes";
 
 function escapeHtml(s: string) {
   return s
@@ -9,9 +9,19 @@ function escapeHtml(s: string) {
     .replace(/"/g, "&quot;");
 }
 
-function inline(s: string) {
-  // Keep TeX, <br>, and markdown links out of the emphasis/url passes so we
-  // never rewrite URLs inside href attributes or break formulas.
+function renderRef(code: string, qcode: string, refs: NoteRef[]) {
+  const qnum = Number(qcode.replace(/^Q/i, ""));
+  const hit =
+    refs.find((r) => r.code === code && (r.sourceQnum ?? r.qnum) === qnum) ??
+    refs.find((r) => (r.sourceQnum ?? r.qnum) === qnum && (!r.code || !code));
+  const label = hit?.label ?? `Q${qnum}`;
+  if (hit?.noteId) {
+    return `<a class="note-ref" href="#note-${escapeHtml(hit.noteId)}" data-note-id="${escapeHtml(hit.noteId)}" data-note-subject="${escapeHtml(hit.subject)}" data-note-session="${escapeHtml(hit.session)}" data-note-q="${hit.qnum}" data-note-paper="${escapeHtml(hit.paperId ?? "")}">${escapeHtml(label)}</a>`;
+  }
+  return `<span class="note-ref note-ref-missing" title="That question is not in the notes bank">${escapeHtml(label)}</span>`;
+}
+
+function inline(s: string, refs: NoteRef[]) {
   const protectedParts: string[] = [];
   const protect = (value: string) => {
     const key = `@@PROTECTED${protectedParts.length}@@`;
@@ -23,6 +33,13 @@ function inline(s: string) {
     /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$|\\\([\s\S]+?\\\)|\\\[[\s\S]+?\\\]|<br\s*\/?>)/gi,
     protect,
   );
+
+  const markers: string[] = [];
+  shielded = shielded.replace(/\[\[KUHS-QUESTION:(\d+):(Q\d+)\]\]/g, (_, code, qcode) => {
+    const key = `@@MARK${markers.length}@@`;
+    markers.push(renderRef(code, qcode, refs));
+    return key;
+  });
 
   const markdownLinks: string[] = [];
   shielded = shielded.replace(/!?(\[[^\]]+\]\()(https?:\/\/[^\s)]+)(\))/g, (m) => {
@@ -51,10 +68,12 @@ function inline(s: string) {
     const parsed = m.match(/^!?(?:\[([^\]]+)\]\()(https?:\/\/[^\s)]+)(\))$/);
     if (!parsed) return;
     const [, label, url] = parsed;
-    const safeLabel = escapeHtml(label);
-    const safeUrl = escapeHtml(url);
-    const rendered = `<a href="${safeUrl}" target="_blank" rel="noreferrer">${safeLabel}</a>`;
+    const rendered = `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(label)}</a>`;
     x = x.replace(`@@LINK${i}@@`, () => rendered);
+  });
+
+  markers.forEach((html, i) => {
+    x = x.replace(`@@MARK${i}@@`, () => html);
   });
 
   protectedParts.forEach((m, i) => {
@@ -75,7 +94,7 @@ function parseListBlock(lines: string[], start: number) {
   const first = lines[start].match(/^(\s*)([-*+]|\d+[.)])\s+(.*)$/);
   if (!first) return null;
   const nodes: ListNode[] = [];
-  const stack: { node: ListNode; indent: number; list: ListNode[] }[] = [];
+  const stack: { node: ListNode; indent: number }[] = [];
   let i = start;
 
   while (i < lines.length) {
@@ -88,11 +107,11 @@ function parseListBlock(lines: string[], start: number) {
     while (stack.length && indent <= stack[stack.length - 1].indent) stack.pop();
     if (!stack.length) nodes.push(node);
     else stack[stack.length - 1].node.children.push(node);
-    stack.push({ node, indent, list: stack.length ? stack[stack.length - 1].list : nodes });
+    stack.push({ node, indent });
     i++;
   }
 
-  const renderNodes = (items: ListNode[]) => {
+  const renderNodes = (items: ListNode[], refs: NoteRef[]) => {
     if (!items.length) return "";
     let out = "";
     let j = 0;
@@ -103,7 +122,7 @@ function parseListBlock(lines: string[], start: number) {
       const tag = ordered ? "ol" : "ul";
       out += `<${tag}>`;
       for (const item of items.slice(j, k)) {
-        out += `<li>${inline(item.text)}${item.children.length ? renderNodes(item.children) : ""}</li>`;
+        out += `<li>${inline(item.text, refs)}${item.children.length ? renderNodes(item.children, refs) : ""}</li>`;
       }
       out += `</${tag}>`;
       j = k;
@@ -111,17 +130,17 @@ function parseListBlock(lines: string[], start: number) {
     return out;
   };
 
-  return { html: renderNodes(nodes), next: i };
+  return { nodes, next: i, render: (refs: NoteRef[]) => renderNodes(nodes, refs) };
 }
 
-function renderMarkdown(source: string) {
+function renderMarkdown(source: string, refs: NoteRef[]) {
   const lines = source.replace(/\r\n/g, "\n").split("\n");
   const out: string[] = [];
   let i = 0;
 
   while (i < lines.length) {
     const line = lines[i];
-    if (/^\s*\[\[KUHS-QUESTION:[^\]]+\]\s*$/.test(line)) {
+    if (/^\s*\[\[KUHS-QUESTION:[^\]]+\]\]\s*$/.test(line)) {
       i++;
       continue;
     }
@@ -137,7 +156,7 @@ function renderMarkdown(source: string) {
       if (i < lines.length) i++;
       out.push(
         `<div class="note-code-wrap"><div class="note-code-bar"><span>${escapeHtml(
-          lang || "ASCII / code",
+          lang || "Figure",
         )}</span><button type="button" data-copy-code="${encodeURIComponent(
           buf.join("\n"),
         )}">Copy</button></div><pre class="note-code"><code>${escapeHtml(
@@ -149,13 +168,8 @@ function renderMarkdown(source: string) {
 
     const h = line.match(/^(#{1,6})\s+(.*)$/);
     if (h) {
-      const level = h[1].length;
-      const id = h[2]
-        .replace(/<[^>]+>/g, "")
-        .replace(/[^\p{L}\p{N}]+/gu, "-")
-        .replace(/^-|-$/g, "")
-        .toLowerCase();
-      out.push(`<h${level} id="note-${id}">${inline(h[2])}</h${level}>`);
+      const level = Math.min(h[1].length + 1, 6);
+      out.push(`<h${level}>${inline(h[2], refs)}</h${level}>`);
       i++;
       continue;
     }
@@ -169,7 +183,9 @@ function renderMarkdown(source: string) {
     if (/^\s*(?:[-*+]|\d+[.)])\s+/.test(line)) {
       const list = parseListBlock(lines, i);
       if (list) {
-        out.push(list.html);
+        const html = list.render(refs);
+        const refer = /refer to/i.test(lines.slice(i, list.next).join("\n"));
+        out.push(refer ? `<div class="note-refer">${html}</div>` : html);
         i = list.next;
         continue;
       }
@@ -195,12 +211,12 @@ function renderMarkdown(source: string) {
       const head = rows.shift() ?? [];
       out.push(
         `<div class="note-table-scroll"><table><thead><tr>${head
-          .map((c) => `<th>${inline(c)}</th>`)
+          .map((c) => `<th>${inline(c, refs)}</th>`)
           .join("")}</tr></thead><tbody>${rows
           .map(
             (r) =>
               `<tr>${head
-                .map((_, j) => `<td>${inline(r[j] ?? "")}</td>`)
+                .map((_, j) => `<td>${inline(r[j] ?? "", refs)}</td>`)
                 .join("")}</tr>`,
           )
           .join("")}</tbody></table></div>`,
@@ -227,21 +243,33 @@ function renderMarkdown(source: string) {
       para.push(lines[i]);
       i++;
     }
-    out.push(`<p>${para.map(inline).join("<br/>")}</p>`);
+    const joined = para.map((p) => inline(p, refs)).join("<br/>");
+    const refer = /refer to/i.test(para.join("\n")) || /data-note-id/.test(joined);
+    out.push(refer ? `<p class="note-refer">${joined}</p>` : `<p>${joined}</p>`);
   }
 
   return out.join("\n");
 }
 
-export function MarkdownNote({ content, zoom = 100 }: { content: string; zoom?: number }) {
+export function MarkdownNote({
+  content,
+  refs = [],
+  zoom = 100,
+  onOpenNote,
+}: {
+  content: string;
+  refs?: NoteRef[];
+  zoom?: number;
+  onOpenNote?: (noteId: string, subject: string, session: string, qnum: number, paperId?: string) => void;
+}) {
+  const rootRef = useRef<HTMLElement>(null);
   const [html, setHtml] = useState("");
-  const rendered = useMemo(() => renderMarkdown(content), [content]);
+  const rendered = useMemo(() => renderMarkdown(content, refs), [content, refs]);
 
   useEffect(() => {
     setHtml(rendered);
-
     const typeset = () => {
-      const root = document.getElementById("note-render-root");
+      const root = rootRef.current;
       if (!root) return;
       const mj = (
         window as unknown as {
@@ -250,8 +278,7 @@ export function MarkdownNote({ content, zoom = 100 }: { content: string; zoom?: 
       ).MathJax;
       if (mj?.typesetPromise) void mj.typesetPromise([root]).catch(() => undefined);
     };
-
-    const id = window.setTimeout(typeset, 0);
+    const id = window.setTimeout(typeset, 40);
     window.addEventListener("mathjax-ready", typeset);
     return () => {
       window.clearTimeout(id);
@@ -260,7 +287,7 @@ export function MarkdownNote({ content, zoom = 100 }: { content: string; zoom?: 
   }, [rendered]);
 
   useEffect(() => {
-    const root = document.getElementById("note-render-root");
+    const root = rootRef.current;
     if (!root) return;
     root.querySelectorAll<HTMLButtonElement>("[data-copy-code]").forEach((btn) => {
       btn.onclick = async () => {
@@ -271,7 +298,7 @@ export function MarkdownNote({ content, zoom = 100 }: { content: string; zoom?: 
             btn.textContent = "Copy";
           }, 1000);
         } catch {
-          // Clipboard access may be unavailable in a restricted preview.
+          /* clipboard may be blocked in preview */
         }
       };
     });
@@ -279,18 +306,18 @@ export function MarkdownNote({ content, zoom = 100 }: { content: string; zoom?: 
 
   return (
     <article
-      id="note-render-root"
+      ref={rootRef}
       className="note-reader"
       style={{ fontSize: `${zoom}%` }}
+      onClick={(e) => {
+        const a = (e.target as HTMLElement).closest<HTMLAnchorElement>("a[data-note-id]");
+        if (!a) return;
+        e.preventDefault();
+        const id = a.dataset.noteId;
+        if (!id) return;
+        onOpenNote?.(id, a.dataset.noteSubject ?? "", a.dataset.noteSession ?? "", Number(a.dataset.noteQ ?? 0), a.dataset.notePaper || undefined);
+      }}
       dangerouslySetInnerHTML={{ __html: html }}
     />
-  );
-}
-
-export function ExternalFigureLink({ href }: { href: string }) {
-  return (
-    <a href={href} target="_blank" rel="noreferrer" className="note-figure-link">
-      <ExternalLink className="size-3.5" /> Open figure
-    </a>
   );
 }
