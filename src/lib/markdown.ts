@@ -80,7 +80,8 @@ export function renderNote(content: string, refs?: NoteRef[]): RenderedNote {
   const refPayloads: { code: string; qnum: number }[] = [];
   const brs: true[] = [];
 
-  let text = content;
+  // structured-format metadata tags (stripped at build; kept as a safety net)
+  let text = content.replace(/^%%(PAPER:|END(\s|%%|$)).*$/gim, "");
 
   // 1. fenced code blocks (before math: diagrams can contain $ or backslashes)
   text = text.replace(/```[a-zA-Z]*\r?\n([\s\S]*?)```/g, (_m, code: string) => {

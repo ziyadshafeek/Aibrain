@@ -110,7 +110,9 @@ export type PdfRef = { text: string; url: string };
 /** Parse note markdown into blocks; cross-refs become inline "→ See …" pointers. */
 export function parseNote(content: string, refs?: NoteRef[], refLinks?: PdfRef[]): Block[] {
   const codeBoxes: string[] = [];
-  let text = content.replace(/```[a-zA-Z]*\r?\n([\s\S]*?)```/g, (_m, code: string) => {
+  // structured-format metadata tags (stripped at build; kept as a safety net)
+  let text = content.replace(/^%%(PAPER:|END(\s|%%|$)).*$/gim, "");
+  text = text.replace(/```[a-zA-Z]*\r?\n([\s\S]*?)```/g, (_m, code: string) => {
     codeBoxes.push(String(code).replace(/\s+$/, ""));
     return `\u0001CB${codeBoxes.length - 1}\u0001`;
   });
