@@ -10,12 +10,12 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as NotesRouteImport } from './routes/notes'
-import { Route as TopicsRouteImport } from './routes/topics'
 import { Route as ApiPdfRouteImport } from './routes/api/pdf'
+import { Route as NotesIndexRouteImport } from './routes/notes.index'
 import { Route as NotesSubjectRouteImport } from './routes/notes.$subject'
 import { Route as PaperIdRouteImport } from './routes/paper.$id'
 import { Route as SubjectSubjectRouteImport } from './routes/subject.$subject'
+import { Route as TopicsIndexRouteImport } from './routes/topics.index'
 import { Route as TopicsKeyRouteImport } from './routes/topics.$key'
 import { Route as YearYearRouteImport } from './routes/year.$year'
 
@@ -24,25 +24,20 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const NotesRoute = NotesRouteImport.update({
-  id: '/notes',
-  path: '/notes',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TopicsRoute = TopicsRouteImport.update({
-  id: '/topics',
-  path: '/topics',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiPdfRoute = ApiPdfRouteImport.update({
   id: '/api/pdf',
   path: '/api/pdf',
   getParentRoute: () => rootRouteImport,
 } as any)
+const NotesIndexRoute = NotesIndexRouteImport.update({
+  id: '/notes/',
+  path: '/notes/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const NotesSubjectRoute = NotesSubjectRouteImport.update({
-  id: '/$subject',
-  path: '/$subject',
-  getParentRoute: () => NotesRoute,
+  id: '/notes/$subject',
+  path: '/notes/$subject',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const PaperIdRoute = PaperIdRouteImport.update({
   id: '/paper/$id',
@@ -54,10 +49,15 @@ const SubjectSubjectRoute = SubjectSubjectRouteImport.update({
   path: '/subject/$subject',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TopicsIndexRoute = TopicsIndexRouteImport.update({
+  id: '/topics/',
+  path: '/topics/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TopicsKeyRoute = TopicsKeyRouteImport.update({
-  id: '/$key',
-  path: '/$key',
-  getParentRoute: () => TopicsRoute,
+  id: '/topics/$key',
+  path: '/topics/$key',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const YearYearRoute = YearYearRouteImport.update({
   id: '/year/$year',
@@ -67,82 +67,84 @@ const YearYearRoute = YearYearRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/notes': typeof NotesRouteWithChildren
-  '/topics': typeof TopicsRouteWithChildren
   '/api/pdf': typeof ApiPdfRoute
   '/notes/$subject': typeof NotesSubjectRoute
   '/paper/$id': typeof PaperIdRoute
   '/subject/$subject': typeof SubjectSubjectRoute
   '/topics/$key': typeof TopicsKeyRoute
   '/year/$year': typeof YearYearRoute
+  '/notes/': typeof NotesIndexRoute
+  '/topics/': typeof TopicsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/notes': typeof NotesRouteWithChildren
-  '/topics': typeof TopicsRouteWithChildren
   '/api/pdf': typeof ApiPdfRoute
   '/notes/$subject': typeof NotesSubjectRoute
   '/paper/$id': typeof PaperIdRoute
   '/subject/$subject': typeof SubjectSubjectRoute
   '/topics/$key': typeof TopicsKeyRoute
   '/year/$year': typeof YearYearRoute
+  '/notes': typeof NotesIndexRoute
+  '/topics': typeof TopicsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/notes': typeof NotesRouteWithChildren
-  '/topics': typeof TopicsRouteWithChildren
   '/api/pdf': typeof ApiPdfRoute
   '/notes/$subject': typeof NotesSubjectRoute
   '/paper/$id': typeof PaperIdRoute
   '/subject/$subject': typeof SubjectSubjectRoute
   '/topics/$key': typeof TopicsKeyRoute
   '/year/$year': typeof YearYearRoute
+  '/notes/': typeof NotesIndexRoute
+  '/topics/': typeof TopicsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/notes'
-    | '/topics'
     | '/api/pdf'
     | '/notes/$subject'
     | '/paper/$id'
     | '/subject/$subject'
     | '/topics/$key'
     | '/year/$year'
+    | '/notes/'
+    | '/topics/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/notes'
-    | '/topics'
     | '/api/pdf'
     | '/notes/$subject'
     | '/paper/$id'
     | '/subject/$subject'
     | '/topics/$key'
     | '/year/$year'
+    | '/notes'
+    | '/topics'
   id:
     | '__root__'
     | '/'
-    | '/notes'
-    | '/topics'
     | '/api/pdf'
     | '/notes/$subject'
     | '/paper/$id'
     | '/subject/$subject'
     | '/topics/$key'
     | '/year/$year'
+    | '/notes/'
+    | '/topics/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  NotesRoute: typeof NotesRouteWithChildren
-  TopicsRoute: typeof TopicsRouteWithChildren
   ApiPdfRoute: typeof ApiPdfRoute
+  NotesSubjectRoute: typeof NotesSubjectRoute
   PaperIdRoute: typeof PaperIdRoute
   SubjectSubjectRoute: typeof SubjectSubjectRoute
+  TopicsKeyRoute: typeof TopicsKeyRoute
   YearYearRoute: typeof YearYearRoute
+  NotesIndexRoute: typeof NotesIndexRoute
+  TopicsIndexRoute: typeof TopicsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -154,20 +156,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/notes': {
-      id: '/notes'
-      path: '/notes'
-      fullPath: '/notes'
-      preLoaderRoute: typeof NotesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/topics': {
-      id: '/topics'
-      path: '/topics'
-      fullPath: '/topics'
-      preLoaderRoute: typeof TopicsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/pdf': {
       id: '/api/pdf'
       path: '/api/pdf'
@@ -175,12 +163,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPdfRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/notes/': {
+      id: '/notes/'
+      path: '/notes'
+      fullPath: '/notes/'
+      preLoaderRoute: typeof NotesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/notes/$subject': {
       id: '/notes/$subject'
-      path: '/$subject'
+      path: '/notes/$subject'
       fullPath: '/notes/$subject'
       preLoaderRoute: typeof NotesSubjectRouteImport
-      parentRoute: typeof NotesRoute
+      parentRoute: typeof rootRouteImport
     }
     '/paper/$id': {
       id: '/paper/$id'
@@ -196,12 +191,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SubjectSubjectRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/topics/': {
+      id: '/topics/'
+      path: '/topics'
+      fullPath: '/topics/'
+      preLoaderRoute: typeof TopicsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/topics/$key': {
       id: '/topics/$key'
-      path: '/$key'
+      path: '/topics/$key'
       fullPath: '/topics/$key'
       preLoaderRoute: typeof TopicsKeyRouteImport
-      parentRoute: typeof TopicsRoute
+      parentRoute: typeof rootRouteImport
     }
     '/year/$year': {
       id: '/year/$year'
@@ -213,35 +215,16 @@ declare module '@tanstack/react-router' {
   }
 }
 
-interface NotesRouteChildren {
-  NotesSubjectRoute: typeof NotesSubjectRoute
-}
-
-const NotesRouteChildren: NotesRouteChildren = {
-  NotesSubjectRoute: NotesSubjectRoute,
-}
-
-const NotesRouteWithChildren = NotesRoute._addFileChildren(NotesRouteChildren)
-
-interface TopicsRouteChildren {
-  TopicsKeyRoute: typeof TopicsKeyRoute
-}
-
-const TopicsRouteChildren: TopicsRouteChildren = {
-  TopicsKeyRoute: TopicsKeyRoute,
-}
-
-const TopicsRouteWithChildren =
-  TopicsRoute._addFileChildren(TopicsRouteChildren)
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  NotesRoute: NotesRouteWithChildren,
-  TopicsRoute: TopicsRouteWithChildren,
   ApiPdfRoute: ApiPdfRoute,
+  NotesSubjectRoute: NotesSubjectRoute,
   PaperIdRoute: PaperIdRoute,
   SubjectSubjectRoute: SubjectSubjectRoute,
+  TopicsKeyRoute: TopicsKeyRoute,
   YearYearRoute: YearYearRoute,
+  NotesIndexRoute: NotesIndexRoute,
+  TopicsIndexRoute: TopicsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
