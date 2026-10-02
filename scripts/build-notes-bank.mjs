@@ -146,7 +146,21 @@ function parseChunk(chunk, chunkIdx, report) {
 
   const finalize = () => {
     if (!current) return;
-    const lines2 = current.contentLines;
+    let lines2 = current.contentLines;
+    // structured-format tags (%%PAPER:…%% / %%END%%) — newer note batches.
+    // %%PAPER%% pins the block's exam session explicitly (overrides the
+    // paper-section context); %%END%% marks a completed answer.
+    const paperTag = lines2.find((l) => /^%%PAPER:\s*((19|20)\d{2}_[A-Z]+)\s*%%\s*$/i.test(l.trim()));
+    if (paperTag) {
+      current.session = paperTag.trim().match(/^%%PAPER:\s*((19|20)\d{2}_[A-Z]+)\s*%%$/i)[1].toUpperCase();
+      current.sessionTagged = true;
+      report.structureTags.paperTags++;
+    }
+    if (lines2.some((l) => /^%%END(\s|%%|$)/i.test(l.trim()))) {
+      current.endMarked = true;
+      report.structureTags.endTags++;
+    }
+    lines2 = lines2.filter((l) => !/^%%(PAPER:|END(\s|%%|$))/i.test(l.trim()));
     let head = null;
     let bodyStart = 0;
     for (let j = 0; j < Math.min(lines2.length, 8); j++) {
@@ -311,6 +325,7 @@ function isReferBlock(block) {
  * ------------------------------------------------------------------ */
 const report = {
   generatedAt: new Date().toISOString(),
+  structureTags: { paperTags: 0, endTags: 0, missingEnd: [] },
   blocks: { total: 0, mcq: 0, refer: 0, full: 0, preface: 0, dead: 0, unmapped: [] },
   continuations: [],
   offsets: [],
@@ -341,7 +356,18 @@ notesJson.notes.forEach((chunk, i) => {
   allBlocks.push(...parseChunk(chunk, i, report));
 });
 report.blocks.total = allBlocks.length;
-report.contentAccounting.sourceChars = notesJson.notes.reduce((a, c) => a + c.content.length, 0);
+// if a batch uses %%END%% markers, flag answers missing one (possible truncation)
+if (allBlocks.some((b) => b.endMarked)) {
+  for (const b of allBlocks) {
+    if (!b.dead && !b.preface && !b.endMarked) {
+      report.structureTags.missingEnd.push({
+        block: `${b.code}|${b.session ?? "?"}|Q${b.qnum ?? "?"}`,
+        heading: (b.heading ?? "").slice(0, 60),
+      });
+    }
+  }
+}
+report.contentAccounting.sourceChars = notesJson.notes.reduce((a, c) => a +c.content.length, 0);
 report.contentAccounting.markerChars = allBlocks.filter((b) => !b.preface).length * 30;
 report.contentAccounting.headerChars = allBlocks.filter((b) => b.ctxLabel).length * 60;
 
