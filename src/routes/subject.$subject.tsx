@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { sessionLabel, uniqueSorted } from "@/lib/papers";
 import { cn } from "@/lib/utils";
-import { displaySubject, loadNotes, type NoteRecord } from "@/lib/notes";
+import { displaySubject, loadNotesBank, type StudyNote } from "@/lib/notes";
 
 export const Route = createFileRoute("/subject/$subject")({
   component: SubjectPage,
@@ -23,8 +23,14 @@ function SubjectPage() {
   const [paperFilter, setPaperFilter] = useState<string>("all");
   const [scheme, setScheme] = useState<string>("all");
   const [year, setYear] = useState<string>("all");
-  const [notes, setNotes] = useState<NoteRecord[]>([]);
-  useEffect(() => { void loadNotes().then(d => setNotes(d.notes.filter(n => displaySubject(n.subject) === displaySubject(decoded)))); }, [decoded]);
+  const [notes, setNotes] = useState<StudyNote[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void loadNotesBank().then((d) => {
+      if (!cancelled) setNotes(d.notes.filter((n) => displaySubject(n.subject) === displaySubject(decoded)));
+    });
+    return () => { cancelled = true; };
+  }, [decoded]);
 
   const subjectPapers = useMemo(
     () => papers.filter((p) => p.subject === decoded),
