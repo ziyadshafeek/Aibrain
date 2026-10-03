@@ -1,45 +1,56 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-  ArrowLeft,
-  ArrowRight,
-  Bookmark,
-  Download,
-  ExternalLink,
-  FileText,
-} from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { useEffect, useMemo } from "react";
+import { ArrowLeft, ArrowRight, Bookmark, ExternalLink } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { QuestionList } from "@/components/question-list";
+import { QuestionCard } from "@/components/study/question-card";
+import { DownloadPdfButton } from "@/components/study/download-button";
+import { useBank } from "@/components/study/bank-provider";
 import { usePapers } from "@/components/papers-provider";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { paperToText } from "@/lib/download";
-import { formatPaperFilename, pdfProxy, schemeLabel, sessionLabel } from "@/lib/papers";
+import { Skeleton } from "@/components/ui/skeleton";
+import { sessionPretty, subjectSlug } from "@/lib/bank";
+import { pdfProxy } from "@/lib/papers";
 import { useLibrary } from "@/lib/store";
-import { cn, downloadBlob } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+
+type PaperSearch = { q?: string };
 
 export const Route = createFileRoute("/paper/$id")({
+  validateSearch: (s: Record<string, unknown>): PaperSearch => ({
+    q: typeof s.q === "string" ? s.q : undefined,
+  }),
   component: PaperPage,
 });
 
+const SECTION_ORDER = [
+  "Long Essay",
+  "Short Essay",
+  "Short Note",
+  "Short Answer",
+  "Draw Diagram",
+  "Multiple Choice",
+  "Question",
+];
+
 function PaperPage() {
   const { id } = Route.useParams();
-  const { papers, getText, loading, textsLoading } = usePapers();
-  const paper = papers.find((p) => p.id === id);
-  const text = getText(id);
-  const addRecent = useLibrary((s) => s.addRecent);
+  const search = Route.useSearch();
+  const { idx, error } = useBank();
+  const { papers: catalogPapers } = usePapers();
   const toggle = useLibrary((s) => s.toggleBookmark);
   const bookmarked = useLibrary((s) => s.bookmarks.includes(id));
-  const [tab, setTab] = useState("questions");
+  const addRecent = useLibrary((s) => s.addRecent);
+
+  const paper = useMemo(() => idx?.bank.papers.find((p) => p.id === id), [idx, id]);
+  const questions = useMemo(() => idx?.byPaper.get(id) ?? [], [idx, id]);
+  const catPaper = useMemo(() => catalogPapers.find((p) => p.id === id), [catalogPapers, id]);
 
   useEffect(() => {
     if (paper) addRecent(paper.id);
   }, [paper, addRecent]);
 
   const siblings = useMemo(() => {
-    if (!paper) return [];
-    return papers
+    if (!idx || !paper) return [];
+    return idx.bank.papers
       .filter(
         (p) =>
           p.subject === paper.subject &&
@@ -50,44 +61,31 @@ function PaperPage() {
         const ya = a.year ?? 0;
         const yb = b.year ?? 0;
         if (ya !== yb) return ya - yb;
-        return (a.month ?? "").localeCompare(b.month ?? "");
+        return (a.session ?? "").localeCompare(b.session ?? "");
       });
-  }, [papers, paper]);
+  }, [idx, paper]);
 
   const index = siblings.findIndex((p) => p.id === id);
   const prev = index > 0 ? siblings[index - 1] : undefined;
   const next = index >= 0 && index < siblings.length - 1 ? siblings[index + 1] : undefined;
 
-  if (loading) {
-    return (
-      <AppShell dense>
-        <p className="text-sm text-muted-foreground">Loading paper…</p>
-      </AppShell>
-    );
-  }
+  const grouped = useMemo(() => {
+    const groups = new Map<string, typeof questions>();
+    for (const q of questions) {
+      const key = q.section || "Question";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(q);
+    }
+    return [...groups.entries()].sort((a, b) => {
+      const ia = SECTION_ORDER.indexOf(a[0]);
+      const ib = SECTION_ORDER.indexOf(b[0]);
+      if (ia !== -1 || ib !== -1) return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+      return a[0].localeCompare(b[0]);
+    });
+  }, [questions]);
 
-  if (!paper) {
-    return (
-      <AppShell dense>
-        <div className="rounded-xl bg-card px-6 py-12 text-center shadow-card">
-          <p className="font-display text-lg">Paper not found</p>
-          <Button asChild className="mt-4">
-            <Link to="/">Back to shelf</Link>
-          </Button>
-        </div>
-      </AppShell>
-    );
-  }
-
-  const questions = text?.questions ?? [];
-  const raw = text?.text ?? "";
-
-  function saveText() {
-    if (!paper) return;
-    downloadBlob(
-      new Blob([paperToText(paper, text)], { type: "text/plain;charset=utf-8" }),
-      formatPaperFilename(paper, "txt"),
-    );
+  if (idx && !paper) {
+    throw notFound();
   }
 
   return (
@@ -97,163 +95,161 @@ function PaperPage() {
           <ArrowLeft className="size-3.5" />
           All papers
         </Link>
-        {paper.subject ? (
+        <span>/</span>
+        <Link
+          to="/notes/$subject"
+          params={{ subject: paper ? subjectSlug(paper.subject) : "" }}
+          className="capitalize hover:text-foreground"
+        >
+          {paper?.displaySubject ?? "…"}
+        </Link>
+        {paper?.year ? (
           <>
             <span>/</span>
-            <Link
-              to="/subject/$subject"
-              params={{ subject: paper.subject }}
-              className="hover:text-foreground"
-            >
-              {paper.subject}
-            </Link>
-          </>
-        ) : null}
-        {paper.year ? (
-          <>
-            <span>/</span>
-            <Link
-              to="/year/$year"
-              params={{ year: String(paper.year) }}
-              className="hover:text-foreground"
-            >
+            <Link to="/year/$year" params={{ year: String(paper.year) }} className="hover:text-foreground">
               {paper.year}
             </Link>
           </>
         ) : null}
       </div>
 
-      <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            {sessionLabel(paper)} · {paper.phaseLabel}
-          </p>
-          <h1 className="mt-1 font-display text-3xl font-medium tracking-tight">
-            {paper.title}
-          </h1>
-          {paper.exam ? (
-            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{paper.exam}</p>
-          ) : null}
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            <Badge>{schemeLabel(paper.scheme)}</Badge>
-            <Badge variant="secondary" className="font-mono tabular-nums">
-              {paper.code}
-            </Badge>
-            {paper.docType === "correction" ? <Badge variant="outline">Correction slip</Badge> : null}
-            {paper.pages ? (
-              <Badge variant="outline">
-                {paper.pages} page{paper.pages === 1 ? "" : "s"}
-              </Badge>
-            ) : null}
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant={bookmarked ? "default" : "outline"}
-            onClick={() => toggle(paper.id)}
-          >
-            <Bookmark className={cn("size-4", bookmarked && "fill-current")} />
-            {bookmarked ? "Saved" : "Save"}
-          </Button>
-          <Button variant="outline" onClick={saveText} disabled={!raw && !questions.length}>
-            <FileText className="size-4" />
-            Text
-          </Button>
-          <Button variant="outline" asChild>
-            <a href={pdfProxy(paper.path)} download={`${paper.code}.pdf`}>
-              <Download className="size-4" />
-              PDF
-            </a>
-          </Button>
-          <Button variant="ghost" asChild>
-            <a href={paper.url} target="_blank" rel="noreferrer">
-              <ExternalLink className="size-4" />
-              KUHS
-            </a>
-          </Button>
-        </div>
-      </header>
+      {error ? (
+        <p className="rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>
+      ) : null}
 
-      <div className="mb-5 flex items-center justify-between gap-3 text-sm">
-        {prev ? (
-          <Link
-            to="/paper/$id"
-            params={{ id: prev.id }}
-            className="inline-flex min-h-11 items-center gap-1 text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="size-4" />
-            {sessionLabel(prev)}
-          </Link>
-        ) : (
-          <span />
-        )}
-        <span className="font-mono text-xs tabular-nums text-muted-foreground">
-          {index >= 0 ? `${index + 1} / ${siblings.length}` : null}
-        </span>
-        {next ? (
-          <Link
-            to="/paper/$id"
-            params={{ id: next.id }}
-            className="inline-flex min-h-11 items-center gap-1 text-muted-foreground hover:text-foreground"
-          >
-            {sessionLabel(next)}
-            <ArrowRight className="size-4" />
-          </Link>
-        ) : (
-          <span />
-        )}
-      </div>
+      {!idx ? (
+        <div className="space-y-4">
+          <Skeleton className="h-9 w-80" />
+          <Skeleton className="h-6 w-56" />
+          <Skeleton className="h-24 rounded-xl" />
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-20 rounded-xl" />
+          ))}
+        </div>
+      ) : null}
 
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="w-full sm:w-auto">
-          <TabsTrigger value="questions" className="flex-1 sm:flex-none">
-            Questions
-          </TabsTrigger>
-          <TabsTrigger value="pdf" className="flex-1 sm:flex-none">
-            Original PDF
-          </TabsTrigger>
-          <TabsTrigger value="raw" className="flex-1 sm:flex-none">
-            Full text
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="questions">
-          <div className="rounded-xl bg-card p-5 shadow-card sm:p-8">
-            {textsLoading && !text ? (
-              <p className="text-sm text-muted-foreground">Extracting questions…</p>
-            ) : (
-              <QuestionList questions={questions} />
-            )}
-          </div>
-        </TabsContent>
-        <TabsContent value="pdf">
-          <div className="overflow-hidden rounded-xl bg-card shadow-card">
-            <iframe
-              title={`${paper.title} PDF`}
-              src={pdfProxy(paper.path)}
-              className="paper-frame"
-            />
-          </div>
-        </TabsContent>
-        <TabsContent value="raw">
-          <div className="rounded-xl bg-card p-5 shadow-card sm:p-8">
-            {raw ? (
-              <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-foreground">
-                {raw}
-              </pre>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Text is not available for this file — open the original PDF.
+      {paper ? (
+        <>
+          <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {sessionPretty(paper.session)} · {paper.scheme === "unknown" ? "scheme n/a" : `${paper.scheme} scheme`}
               </p>
+              <h1 className="mt-1 font-display text-3xl font-medium tracking-tight">
+                {paper.displaySubject}
+                {paper.paper ? ` — ${paper.paper}` : ""}
+              </h1>
+              <div className="mt-2.5 flex flex-wrap gap-1.5 text-xs">
+                <span className="rounded-md bg-muted px-2 py-1 font-mono tabular-nums text-muted-foreground">
+                  {paper.code}
+                </span>
+                <span className="rounded-md bg-muted px-2 py-1 text-muted-foreground">
+                  {questions.length} questions
+                </span>
+                <span className="rounded-md bg-primary/15 px-2 py-1 font-medium text-primary">
+                  {paper.withNotes} with notes
+                </span>
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => toggle(paper.id)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors",
+                  bookmarked
+                    ? "border-primary bg-primary/15 text-primary"
+                    : "border-border bg-card text-muted-foreground hover:text-foreground",
+                )}
+                aria-pressed={bookmarked}
+              >
+                <Bookmark className={cn("size-3.5", bookmarked && "fill-current")} aria-hidden />
+                {bookmarked ? "Saved" : "Save"}
+              </button>
+              <DownloadPdfButton payload={{ paperId: paper.id }} label="Download paper + notes" />
+            </div>
+          </header>
+
+          <div className="mb-5 flex items-center justify-between gap-3 text-sm">
+            {prev ? (
+              <Link
+                to="/paper/$id"
+                params={{ id: prev.id }}
+                className="inline-flex min-h-11 items-center gap-1 text-muted-foreground hover:text-foreground"
+              >
+                <ArrowLeft className="size-4" aria-hidden />
+                {sessionPretty(prev.session)}
+              </Link>
+            ) : (
+              <span />
+            )}
+            <span className="font-mono text-xs tabular-nums text-muted-foreground">
+              {index >= 0 ? `${index + 1} / ${siblings.length}` : null}
+            </span>
+            {next ? (
+              <Link
+                to="/paper/$id"
+                params={{ id: next.id }}
+                className="inline-flex min-h-11 items-center gap-1 text-muted-foreground hover:text-foreground"
+              >
+                {sessionPretty(next.session)}
+                <ArrowRight className="size-4" aria-hidden />
+              </Link>
+            ) : (
+              <span />
             )}
           </div>
-        </TabsContent>
-      </Tabs>
 
-      {questions.length === 0 && !textsLoading ? (
-        <p className="mt-4 inline-flex items-center gap-2 text-sm text-muted-foreground">
-          <FileText className="size-4" />
-          Scanned or image-only papers stay in the PDF tab.
-        </p>
+          {search.q ? (
+            <p className="mb-4 rounded-lg border border-primary/40 bg-primary/10 px-3.5 py-2.5 text-xs text-primary">
+              Opened from a cross-reference — the linked question is highlighted below.
+              <Link
+                to="/paper/$id"
+                params={{ id: paper.id }}
+                search={{}}
+                className="ml-2 underline underline-offset-2"
+              >
+                clear
+              </Link>
+            </p>
+          ) : null}
+
+          <div className="space-y-7">
+            {grouped.map(([section, qs]) => (
+              <section key={section}>
+                <h2 className="mb-3 flex items-baseline gap-2.5 font-display text-lg font-semibold tracking-tight">
+                  {section}
+                  <span className="font-sans text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    {qs.length} question{qs.length > 1 ? "s" : ""}
+                  </span>
+                </h2>
+                <div className="space-y-2.5">
+                  {qs.map((q) => (
+                    <QuestionCard key={q.id} q={q} highlight={search.q === q.id} defaultOpen={search.q === q.id} />
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+
+          <p className="mt-10 text-center text-xs text-muted-foreground">
+            Notes are AI-generated study aids — always cross-check with standard textbooks.
+            {catPaper ? (
+              <>
+                <span className="mx-2" aria-hidden>·</span>
+                Original KUHS PDF:{" "}
+                <a
+                  href={pdfProxy(catPaper.path)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-0.5 underline underline-offset-2 hover:text-foreground"
+                >
+                  view <ExternalLink className="size-3" aria-hidden />
+                </a>
+              </>
+            ) : null}
+          </p>
+        </>
       ) : null}
     </AppShell>
   );

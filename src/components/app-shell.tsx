@@ -1,115 +1,61 @@
-import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { Bookmark, Download, Search, BookOpen } from "lucide-react";
-import { type FormEvent, useEffect, useState } from "react";
-import { Input } from "@/components/ui/input";
-import { usePapers } from "@/components/papers-provider";
+import type { ReactNode } from "react";
+import { Link, useLocation } from "@tanstack/react-router";
+import { BookOpenCheck, Layers, Library, Stethoscope } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export function AppShell({
-  children,
-  dense = false,
-}: {
-  children: React.ReactNode;
-  dense?: boolean;
-}) {
-  const { catalog } = usePapers();
-  const navigate = useNavigate();
-  const search = useSearch({ strict: false }) as { q?: string };
-  const [q, setQ] = useState(search.q ?? "");
+const NAV = [
+  { to: "/", label: "Papers", icon: Library },
+  { to: "/notes", label: "Study notes", icon: BookOpenCheck },
+  { to: "/topics", label: "Topics", icon: Layers },
+] as const;
 
-  useEffect(() => {
-    setQ(search.q ?? "");
-  }, [search.q]);
-
-  function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    const next = q.trim();
-    void navigate({
-      to: "/",
-      search: next ? { q: next } : {},
-    });
-  }
-
+export function AppShell({ children, dense = false }: { children: ReactNode; dense?: boolean }) {
+  const { pathname } = useLocation();
   return (
-    <div className="flex min-h-dvh flex-col">
-      <header className="sticky top-0 z-30 border-b border-border/80 bg-background/85 backdrop-blur-md">
-        <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
-          <Link
-            to="/"
-            className="flex shrink-0 items-center gap-2 text-foreground"
-            aria-label="KUHS Papers home"
-          >
-            <span className="flex size-9 items-center justify-center rounded-md bg-primary font-display text-lg leading-none text-primary-foreground">
-              Q
+    <div className="min-h-dvh">
+      <header className="sticky top-0 z-40 border-b border-rule/60 bg-bg/85 backdrop-blur-md">
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
+          <Link to="/" className="group flex min-w-0 items-center gap-2.5">
+            <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-xl bg-moss text-ink-on-accent shadow-card">
+              <Stethoscope className="size-4.5" aria-hidden />
             </span>
-            <span className="hidden flex-col leading-tight sm:flex">
-              <span className="font-display text-base font-medium tracking-tight">
-                KUHS Papers
+            <span className="min-w-0">
+              <span className="block truncate font-display text-[15px] font-semibold leading-tight text-fg group-hover:text-moss-bright">
+                KUHS MBBS Papers
               </span>
-              <span className="text-xs text-muted-foreground">
-                MBBS previous years
+              <span className="block text-[10.5px] uppercase tracking-[0.14em] text-fg-soft">
+                previous papers · study notes
               </span>
             </span>
           </Link>
-          <form onSubmit={onSubmit} className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search subject, year, or a topic…"
-              aria-label="Search question papers"
-              className="pl-9"
-            />
-          </form>
-          <Link
-            to="/"
-            hash="download-pack"
-            className="inline-flex size-11 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-            aria-label="Download packs"
-          >
-            <Download className="size-5" />
-          </Link>
-          <Link
-            to="/"
-            search={{ saved: "1" }}
-            className="inline-flex size-11 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-            aria-label="Saved papers"
-          >
-            <Bookmark className="size-5" />
-          </Link>
-          <Link
-            to="/notes"
-            className="inline-flex size-11 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-            aria-label="Study notes"
-          >
-            <BookOpen className="size-5" />
-          </Link>
+          <nav className="flex items-center gap-1" aria-label="Primary">
+            {NAV.map(({ to, label, icon: Icon }) => {
+              const active = to === "/" ? pathname === "/" : pathname.startsWith(to);
+              return (
+                <Link
+                  key={to}
+                  to={to}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-colors sm:px-3",
+                    active
+                      ? "bg-surface-muted text-moss-bright"
+                      : "text-fg-muted hover:bg-surface-muted/60 hover:text-fg",
+                  )}
+                >
+                  <Icon className="size-4" aria-hidden />
+                  <span className="hidden sm:inline">{label}</span>
+                </Link>
+              );
+            })}
+          </nav>
         </div>
       </header>
-      <main
-        className={cn(
-          "mx-auto w-full max-w-6xl flex-1 px-4 sm:px-6",
-          dense ? "py-4" : "py-8",
-        )}
-      >
-        {children}
-      </main>
-      <footer className="border-t border-border/80 py-6 text-center text-xs text-muted-foreground">
-        <p>
-          Papers sourced from{" "}
-          <a
-            className="underline decoration-border underline-offset-2 hover:text-foreground"
-            href={
-              catalog?.source ??
-              "https://www2.kuhs.ac.in/kuhs_new/index.php?id=14&folder=MEDICAL/UG"
-            }
-            target="_blank"
-            rel="noreferrer"
-          >
-            Kerala University of Health Sciences
-          </a>
-          . Subjects are read from each paper’s printed heading. For study use.
-        </p>
+      <main className={cn("mx-auto max-w-6xl px-4 sm:px-6", dense ? "py-5" : "py-8")}>{children}</main>
+      <footer className="mt-14 border-t border-rule/60 py-6">
+        <div className="mx-auto max-w-6xl px-4 text-center text-xs text-fg-soft sm:px-6">
+          Unofficial study companion for Kerala University of Health Sciences MBBS previous question papers —
+          notes are AI-generated study aids, always cross-check with textbooks.
+        </div>
       </footer>
     </div>
   );

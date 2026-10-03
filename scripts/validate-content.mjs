@@ -35,7 +35,7 @@ for (const paper of catalog.papers) {
     fail(`unexpected document type: ${paper.id}`);
   }
 }
-if (!Array.isArray(notes.notes) || notes.notes.length !== 4) fail("expected four note sets");
+if (!Array.isArray(notes.notes) || notes.notes.length === 0) fail("no note sets in notes.json");
 for (const note of notes.notes) {
   if (!note.id || !note.subject || !note.title || !note.content) fail(`incomplete note record: ${note.id}`);
   if ((note.content.match(/\[\[KUHS-QUESTION:[^\]]+\]\]/g) ?? []).length === 0) {
@@ -50,8 +50,17 @@ const requiredFiles = [
   "vercel.json",
   "src/routes/__root.tsx",
   "src/routes/index.tsx",
-  "src/routes/notes.tsx",
+  "src/routes/notes.index.tsx",
   "src/routes/notes.$subject.tsx",
+  "src/routes/topics.index.tsx",
+  "src/routes/topics.$key.tsx",
+  "src/routes/paper.$id.tsx",
+  "src/lib/bank.ts",
+  "src/lib/markdown.ts",
+  "src/lib/pdf.ts",
+  "src/components/study/question-card.tsx",
+  "src/components/study/note-markdown.tsx",
+  "src/components/study/download-button.tsx",
   "src/routes/api/pdf.ts",
   "src/routeTree.gen.ts",
 ];
@@ -92,6 +101,57 @@ if (rootSource.includes("preview-host-bridge") || rootSource.includes("__grok/")
   fail("public app still contains Grok preview-only wiring");
 }
 
-const sizes = ["public/catalog.json", "public/fulltext.json", "public/notes.json"].map((p) => `${p}=${statSync(join(root, p)).size}`);
-console.log(`CONTENT QA PASSED: ${catalog.papers.length} papers, ${fulltextIds.length} full-text records, ${notes.notes.length} note sets.`);
+/* ---------------- notes bank (schema v5) ---------------- */
+const bank = readJson("public/notes-bank.json");
+if (bank.schemaVersion !== 5) fail(`unexpected bank schemaVersion: ${bank.schemaVersion}`);
+if (!Array.isArray(bank.questions) || bank.questions.length === 0) fail("bank has no questions");
+
+const bankIds = new Set(bank.questions.map((q) => q.id));
+if (bankIds.size !== bank.questions.length) fail("bank contains duplicate question ids");
+const paperIds = new Set(bank.papers.map((p) => p.id));
+
+let noNote = 0;
+let badRefTarget = 0;
+let badRefPaper = 0;
+let topicQMissing = 0;
+const topicQuestionSeen = new Set();
+for (const q of bank.questions) {
+  if (!paperIds.has(q.paperId)) fail(`question references unknown paper: ${q.id}`);
+  if (!q.hasNote || !q.note?.content) {
+    noNote++;
+    continue;
+  }
+  const idOk = /^(?:final|third|second|first)_[a-z0-9_]+__q\d{2}$/.test(q.id);
+  if (!idOk) fail(`malformed question id: ${q.id}`);
+  for (const ref of q.note.refs ?? []) {
+    if (ref.id && !bankIds.has(ref.id)) badRefTarget++;
+    if (ref.id && !paperIds.has(ref.id.split("__")[0])) badRefPaper++;
+  }
+}
+for (const t of bank.topics) {
+  for (const qid of t.questionIds) {
+    if (!bankIds.has(qid)) topicQMissing++;
+    else topicQuestionSeen.add(qid);
+  }
+}
+if (noNote > 0) fail(`${noNote} questions lack notes (expected 0 — bank reports ${bank.stats.questionsWithoutNotes ?? 0})`);
+if (badRefTarget) fail(`${badRefTarget} note refs point to nonexistent question ids`);
+if (badRefPaper) fail(`${badRefPaper} note refs point to nonexistent papers`);
+if (topicQMissing) fail(`${topicQMissing} topic questionIds do not exist`);
+const coveredTopics = new Set(bank.questions.filter((q) => q.topic && q.topic !== "mcq answer key").map((q) => q.id));
+if (coveredTopics.size && Math.abs(coveredTopics.size - topicQuestionSeen.size) > coveredTopics.size * 0.05) {
+  console.warn(
+    `CONTENT QA WARNING: topic coverage ${topicQuestionSeen.size} vs topicized questions ${coveredTopics.size} (>5% drift)`,
+  );
+}
+const statsQ = bank.stats?.questions;
+if (statsQ !== bank.questions.length) fail(`stats.questions (${statsQ}) != questions.length (${bank.questions.length})`);
+if (bank.stats?.withNotes !== bank.questions.filter((q) => q.hasNote).length) {
+  fail("stats.withNotes does not match actual note count");
+}
+
+const sizes = ["public/catalog.json", "public/fulltext.json", "public/notes.json", "public/notes-bank.json"].map((p) => `${p}=${statSync(join(root, p)).size}`);
+console.log(
+  `CONTENT QA PASSED: ${catalog.papers.length} papers, ${fulltextIds.length} full-text records, ${notes.notes.length} note sets, ${bank.questions.length} questions with notes, ${bank.topics.length} topics.`,
+);
 console.log(sizes.join(" · "));

@@ -1,7 +1,8 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { PapersProvider } from "@/components/papers-provider";
-import { NotesProvider } from "@/components/notes-provider";
+import { BankProvider } from "@/components/study/bank-provider";
 import appCss from "../styles.css?url";
+import "katex/dist/katex.min.css";
 
 const APP_NAME = "KUHS Papers & Study Notes";
 
@@ -14,9 +15,9 @@ export const Route = createRootRoute({
       {
         name: "description",
         content:
-          "Browse, search, read, and study Kerala University of Health Sciences MBBS previous-year papers and structured study notes in one place.",
+          "Browse, search, read, and study Kerala University of Health Sciences MBBS previous-year papers with structured study notes, cross-linked answers and PDF exports.",
       },
-      { name: "theme-color", content: "#245E52" },
+      { name: "theme-color", content: "#0d1310" },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
@@ -34,21 +35,15 @@ export const Route = createRootRoute({
     ],
   }),
   component: () => (
-    <html lang="en" className="antialiased" suppressHydrationWarning>
+    <html lang="en" className="dark antialiased" suppressHydrationWarning>
       <head>
         <HeadContent />
-        <script dangerouslySetInnerHTML={{ __html: `window.MathJax = { tex: { inlineMath: [['$','$'], ['\\(','\\)']], displayMath: [['$$','$$'], ['\\[','\\]']] }, svg: { fontCache: 'global' } };` }} />
-        <script
-          async
-          src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"
-          onLoad={() => window.dispatchEvent(new Event("mathjax-ready"))}
-        />
       </head>
       <body>
         <PapersProvider>
-          <NotesProvider>
+          <BankProvider>
             <Outlet />
-          </NotesProvider>
+          </BankProvider>
         </PapersProvider>
         <Scripts />
       </body>

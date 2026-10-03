@@ -27,7 +27,7 @@ const SUBJECT_RULES: { name: string; line: RegExp; any?: RegExp }[] = [
   { name: "Community Medicine", line: /community\s*medicine/i },
   {
     name: "Otorhinolaryngology",
-    line: /oto[\s\-]*rhino[\s\-]*laryng|otorhinolaryng|\bent\b/i,
+    line: /oto[\s-]*rhino[\s-]*laryng|otorhinolaryng|\bent\b/i,
   },
   { name: "Ophthalmology", line: /ophthalmolog/i },
   { name: "Paediatrics", line: /paediatrics?|pediatrics?/i },
@@ -82,10 +82,10 @@ function detectScheme(head: string): string | null {
 
 function detectPaper(blob: string): string | null {
   const cleaned = blob.replace(/part\s*II/gi, " ");
-  if (/paper\s*(ii|2)\b/i.test(cleaned) || /[–\-]\s*(ii|2)\s*$/im.test(cleaned)) {
+  if (/paper\s*(ii|2)\b/i.test(cleaned) || /[–-]\s*(ii|2)\s*$/im.test(cleaned)) {
     return "Paper II";
   }
-  if (/paper\s*(i|1)\b/i.test(cleaned) || /[–\-]\s*(i|1)\s*$/im.test(cleaned)) {
+  if (/paper\s*(i|1)\b/i.test(cleaned) || /[–-]\s*(i|1)\s*$/im.test(cleaned)) {
     return "Paper I";
   }
   return null;
