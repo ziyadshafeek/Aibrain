@@ -18,13 +18,20 @@ export function NoteMarkdown({ content, refs, onNavigateRef }: { content: string
       // markdown text is escaped, and every injected tag is generated here.
       dangerouslySetInnerHTML={{ __html: html }}
       onClick={(e) => {
-        const a = (e.target as HTMLElement).closest("a.xref");
+        if (!(e.target instanceof Element)) return;
+        const a = e.target.closest("a.xref");
         if (!a) return;
         const href = a.getAttribute("href");
         if (!href) return;
+        let u: URL;
+        try {
+          u = new URL(href, "http://local");
+        } catch {
+          return;
+        }
+        if (u.origin !== "http://local" || !u.pathname.startsWith("/paper/")) return;
         e.preventDefault();
         onNavigateRef?.();
-        const u = new URL(href, "http://local");
         navigate({
           to: u.pathname as never,
           search: { q: u.searchParams.get("q") ?? undefined } as never,

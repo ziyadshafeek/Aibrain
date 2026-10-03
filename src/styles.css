@@ -178,14 +178,49 @@
   padding: 0.08em 0.36em;
 }
 
-/* ASCII-art diagram rendered as an image */
+/* Markdown images and external references */
+.note-prose img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 10px;
+  border: 1px solid color-mix(in oklab, var(--color-rule) 80%, transparent);
+}
+.note-prose a:not(.xref) {
+  color: var(--color-moss-bright);
+  text-decoration: underline;
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.18em;
+}
+.note-prose a:not(.xref):hover { color: var(--color-fg); }
+.note-prose a:not(.xref):focus-visible,
+.note-prose a.xref:focus-visible {
+  outline: 2px solid var(--color-moss-bright);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* ASCII-art diagram rendered as a natural-size, scrollable SVG image */
 .note-prose figure.code-diagram {
   margin: 1em 0;
-  text-align: center;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.1em 0 0.45em;
+  text-align: left;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.note-prose figure.code-diagram:focus-visible {
+  outline: 2px solid var(--color-moss-bright);
+  outline-offset: 3px;
+  border-radius: 6px;
 }
 .note-prose figure.code-diagram img {
-  display: inline-block;
-  max-width: 100%;
+  display: block;
+  width: auto;
+  max-width: none;
   height: auto;
   border-radius: 10px;
   border: 1px solid color-mix(in oklab, var(--color-rule) 80%, transparent);
